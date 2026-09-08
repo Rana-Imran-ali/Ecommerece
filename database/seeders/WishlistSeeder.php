@@ -2,7 +2,7 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
+use App\Models\Wishlist;
 use Illuminate\Database\Seeder;
 
 class WishlistSeeder extends Seeder
@@ -12,6 +12,6 @@ class WishlistSeeder extends Seeder
      */
     public function run(): void
     {
-        //
+        Wishlist::firstOrCreate(['user_id' => 1]);
     }
 }

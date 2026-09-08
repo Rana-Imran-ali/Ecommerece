@@ -10,6 +10,13 @@ class Order extends Model
 {
     protected $fillable = [
         'user_id',
+        'address_id',
+        'status',
+        'total_amount',
+    ];
+
+    protected $casts = [
+        'total_amount' => 'decimal:2',
     ];
 
     public function user(): BelongsTo

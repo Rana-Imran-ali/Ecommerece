@@ -1,0 +1,162 @@
+@extends('layouts.app')
+
+@section('title', 'Order Details - ' . config('app.name', 'EStore'))
+
+@section('content')
+<div class="space-y-6 max-w-4xl mx-auto">
+    <!-- Breadcrumb -->
+    <div class="flex items-center justify-between text-sm">
+        <a href="{{ url('/orders') }}" class="text-indigo-600 hover:underline">&larr; Back to All Orders</a>
+        <span class="text-gray-400">Order ID: #{{ $orderId }}</span>
+    </div>
+
+    <!-- Alert Container -->
+    <div id="order-detail-alert"></div>
+
+    <!-- Main Receipt Container -->
+    <div id="order-card" class="bg-white rounded-lg border border-gray-200 overflow-hidden p-6 sm:p-8 space-y-6">
+        <div class="py-16 text-center text-gray-500">
+            <div class="inline-block animate-spin w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full mb-2"></div>
+            <div>Loading order receipt...</div>
+        </div>
+    </div>
+</div>
+@endsection
+
+@push('scripts')
+<script>
+    const orderId = {{ $orderId }};
+
+    async function loadOrder() {
+        if (!getAuthToken()) {
+            window.location.href = '/login?redirect=/orders/' + orderId;
+            return;
+        }
+
+        const container = document.getElementById('order-card');
+        const res = await apiFetch(`/api/orders/${orderId}`);
+
+        if (!res.ok) {
+            container.innerHTML = `
+                <div class="text-center py-12">
+                    <p class="text-lg font-semibold text-red-600">Order not found</p>
+                    <p class="text-sm text-gray-500 mt-1">${res.data?.message || 'Access denied or invalid order ID.'}</p>
+                    <a href="/orders" class="inline-block mt-4 text-sm text-indigo-600 hover:underline">View my orders</a>
+                </div>
+            `;
+            return;
+        }
+
+        const order = res.data?.data;
+        if (!order) return;
+
+        const addr = order.address || {};
+        const payment = order.payments?.[0] || {};
+        const couponUsage = order.coupon_usages?.[0] || null;
+        const coupon = couponUsage?.coupon || null;
+
+        const statusColors = {
+            pending: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+            completed: 'bg-green-100 text-green-800 border-green-200',
+            cancelled: 'bg-red-100 text-red-800 border-red-200',
+        };
+        const badgeClass = statusColors[order.status] || 'bg-gray-100 text-gray-800 border-gray-200';
+
+        container.innerHTML = `
+            <!-- Receipt Header -->
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-gray-100 gap-4">
+                <div>
+                    <div class="flex items-center space-x-3">
+                        <h1 class="text-2xl font-bold text-gray-900">Order #${order.id}</h1>
+                        <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold border uppercase tracking-wider ${badgeClass}">
+                            ${order.status}
+                        </span>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-1">Placed on ${new Date(order.created_at).toLocaleString()}</p>
+                </div>
+
+                ${order.status === 'pending' ? `
+                    <button type="button" onclick="cancelOrder()"
+                            class="py-2 px-3.5 border border-red-300 text-red-600 hover:bg-red-50 text-xs font-bold rounded-md transition-colors">
+                        Cancel Order
+                    </button>
+                ` : ''}
+            </div>
+
+            <!-- Shipping & Payment Information Cards -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                <div class="p-4 bg-gray-50 rounded-lg border border-gray-100 space-y-1">
+                    <span class="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-1">Delivery Address</span>
+                    <p class="font-bold text-gray-800">${addr.name || 'Recipient'}</p>
+                    <p class="text-gray-600">${addr.address_line1 || ''}${addr.address_line2 ? ', ' + addr.address_line2 : ''}</p>
+                    <p class="text-gray-600">${addr.city || ''}, ${addr.state || ''} ${addr.postal_code || ''}</p>
+                    <p class="text-gray-600">${addr.country || ''}</p>
+                    <p class="text-xs text-gray-400 mt-1">Phone: ${addr.phone || 'N/A'}</p>
+                </div>
+
+                <div class="p-4 bg-gray-50 rounded-lg border border-gray-100 space-y-1">
+                    <span class="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-1">Payment & Promo</span>
+                    <p class="text-gray-700"><span class="font-semibold">Method:</span> <span class="uppercase">${payment.payment_method || 'N/A'}</span></p>
+                    <p class="text-gray-700"><span class="font-semibold">Payment Status:</span> <span class="capitalize">${payment.status || 'pending'}</span></p>
+                    ${coupon ? `
+                        <p class="text-green-700 font-medium pt-1">
+                            Promo Applied: <span class="font-mono font-bold">${coupon.code}</span> (${coupon.discount_percent}% off)
+                        </p>
+                    ` : '<p class="text-gray-400">No coupon applied</p>'}
+                </div>
+            </div>
+
+            <!-- Items Table -->
+            <div class="space-y-3">
+                <h3 class="text-sm font-bold text-gray-800">Purchased Items</h3>
+                <div class="divide-y divide-gray-100 border-t border-b border-gray-100">
+                    ${(order.items || []).map(item => {
+                        const p = item.product || {};
+                        const lineTotal = (parseFloat(item.price) * item.quantity).toFixed(2);
+                        return `
+                            <div class="py-3 flex items-center justify-between text-sm">
+                                <div>
+                                    <p class="font-bold text-gray-900">${p.name || 'Product'}</p>
+                                    <p class="text-xs text-gray-500">Unit Price: $${parseFloat(item.price).toFixed(2)} &times; ${item.quantity} qty</p>
+                                </div>
+                                <span class="font-bold text-gray-900">$${lineTotal}</span>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            </div>
+
+            <!-- Total Breakdown -->
+            <div class="flex justify-end pt-2">
+                <div class="w-64 space-y-1.5 text-sm">
+                    <div class="flex justify-between text-gray-600">
+                        <span>Shipping:</span>
+                        <span class="text-green-600 font-medium">Free</span>
+                    </div>
+                    <div class="border-t border-gray-200 pt-2 flex justify-between text-lg font-bold text-gray-900">
+                        <span>Grand Total:</span>
+                        <span class="text-indigo-600">$${parseFloat(order.total_amount).toFixed(2)}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    async function cancelOrder() {
+        if (!confirm('Are you sure you want to cancel this order? Product stock will be automatically restored.')) return;
+
+        const res = await apiFetch(`/api/orders/${orderId}/cancel`, {
+            method: 'PATCH'
+        });
+
+        if (res.ok) {
+            showAlert('order-detail-alert', 'Order cancelled successfully and product inventory restored.', 'success');
+            loadOrder();
+        } else {
+            showAlert('order-detail-alert', res.data?.message || 'Failed to cancel order.', 'danger');
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', loadOrder);
+</script>
+@endpush
