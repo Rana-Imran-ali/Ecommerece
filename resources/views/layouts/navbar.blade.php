@@ -16,6 +16,10 @@
                        class="text-sm font-medium transition-colors {{ request()->is('/') ? 'text-indigo-600 font-semibold' : 'text-gray-600 hover:text-gray-900' }}">
                         Home
                     </a>
+                    <a href="{{ url('/shop') }}" 
+                       class="text-sm font-medium transition-colors {{ request()->is('shop*') ? 'text-indigo-600 font-semibold' : 'text-gray-600 hover:text-gray-900' }}">
+                        Shop
+                    </a>
                     <a href="{{ url('/products') }}" 
                        class="text-sm font-medium transition-colors {{ request()->is('products*') ? 'text-indigo-600 font-semibold' : 'text-gray-600 hover:text-gray-900' }}">
                         Products
@@ -24,11 +28,28 @@
                        class="text-sm font-medium transition-colors {{ request()->is('categories*') ? 'text-indigo-600 font-semibold' : 'text-gray-600 hover:text-gray-900' }}">
                         Categories
                     </a>
+                    <a href="{{ url('/about') }}" 
+                       class="text-sm font-medium transition-colors {{ request()->is('about*') ? 'text-indigo-600 font-semibold' : 'text-gray-600 hover:text-gray-900' }}">
+                        About
+                    </a>
+                    <a href="{{ url('/contact') }}" 
+                       class="text-sm font-medium transition-colors {{ request()->is('contact*') ? 'text-indigo-600 font-semibold' : 'text-gray-600 hover:text-gray-900' }}">
+                        Contact
+                    </a>
                 </div>
             </div>
 
-            <!-- Right: Wishlist, Cart, User / Guest & Mobile Toggle -->
+            <!-- Right: Search, Wishlist, Cart, User / Guest & Mobile Toggle -->
             <div class="flex items-center space-x-3 sm:space-x-4">
+                <!-- Search -->
+                <a href="{{ url('/search') }}" 
+                   class="p-2 text-gray-600 hover:text-indigo-600 transition-colors {{ request()->is('search*') ? 'text-indigo-600' : '' }}" 
+                   title="Search catalog">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                </a>
+
                 <!-- Wishlist -->
                 <a href="{{ url('/wishlist') }}" 
                    class="relative p-2 text-gray-600 hover:text-gray-900 transition-colors" 
@@ -126,13 +147,29 @@
                class="block px-3 py-2 rounded-md text-base font-medium {{ request()->is('/') ? 'bg-indigo-50 text-indigo-600 font-semibold' : 'text-gray-700 hover:bg-gray-50' }}">
                 Home
             </a>
+            <a href="{{ url('/shop') }}" 
+               class="block px-3 py-2 rounded-md text-base font-medium {{ request()->is('shop*') ? 'bg-indigo-50 text-indigo-600 font-semibold' : 'text-gray-700 hover:bg-gray-50' }}">
+                Shop
+            </a>
             <a href="{{ url('/products') }}" 
                class="block px-3 py-2 rounded-md text-base font-medium {{ request()->is('products*') ? 'bg-indigo-50 text-indigo-600 font-semibold' : 'text-gray-700 hover:bg-gray-50' }}">
                 Products
             </a>
+            <a href="{{ url('/search') }}" 
+               class="block px-3 py-2 rounded-md text-base font-medium {{ request()->is('search*') ? 'bg-indigo-50 text-indigo-600 font-semibold' : 'text-gray-700 hover:bg-gray-50' }}">
+                Search
+            </a>
             <a href="{{ url('/categories') }}" 
                class="block px-3 py-2 rounded-md text-base font-medium {{ request()->is('categories*') ? 'bg-indigo-50 text-indigo-600 font-semibold' : 'text-gray-700 hover:bg-gray-50' }}">
                 Categories
+            </a>
+            <a href="{{ url('/about') }}" 
+               class="block px-3 py-2 rounded-md text-base font-medium {{ request()->is('about*') ? 'bg-indigo-50 text-indigo-600 font-semibold' : 'text-gray-700 hover:bg-gray-50' }}">
+                About
+            </a>
+            <a href="{{ url('/contact') }}" 
+               class="block px-3 py-2 rounded-md text-base font-medium {{ request()->is('contact*') ? 'bg-indigo-50 text-indigo-600 font-semibold' : 'text-gray-700 hover:bg-gray-50' }}">
+                Contact
             </a>
             <a href="{{ url('/wishlist') }}" 
                class="flex items-center justify-between px-3 py-2 rounded-md text-base font-medium {{ request()->is('wishlist*') ? 'bg-indigo-50 text-indigo-600 font-semibold' : 'text-gray-700 hover:bg-gray-50' }}">

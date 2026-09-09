@@ -12,6 +12,8 @@ class Payment extends Model
         'payment_method',
         'amount',
         'status',
+        'stripe_session_id',
+        'stripe_payment_intent_id',
     ];
 
     protected $casts = [

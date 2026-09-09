@@ -35,6 +35,37 @@
             </main>
         </div>
 
+        <!-- Authentication Session Bridge -->
+        @auth
+            @php
+                $sessionUser = [
+                    'id' => auth()->id(),
+                    'name' => auth()->user()->name,
+                    'email' => auth()->user()->email,
+                    'role' => auth()->user()->role ?? 'customer',
+                ];
+                $sessionToken = \Illuminate\Support\Facades\Crypt::encryptString(auth()->id() . '|' . time());
+            @endphp
+            <script>
+                (function() {
+                    const token = @json($sessionToken);
+                    const user = @json($sessionUser);
+                    localStorage.setItem('ecommerce_auth_token', token);
+                    localStorage.setItem('ecommerce_auth_user', JSON.stringify(user));
+                })();
+            </script>
+        @else
+            <script>
+                (function() {
+                    if (sessionStorage.getItem('logged_out')) {
+                        localStorage.removeItem('ecommerce_auth_token');
+                        localStorage.removeItem('ecommerce_auth_user');
+                        sessionStorage.removeItem('logged_out');
+                    }
+                })();
+            </script>
+        @endauth
+
         <!-- Global API Helper & Stack Scripts -->
         <script src="{{ asset('js/api.js') }}"></script>
         @stack('scripts')

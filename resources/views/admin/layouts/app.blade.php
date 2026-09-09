@@ -205,8 +205,14 @@
         <a href="{{ route('admin.orders.index') }}" class="nav-link {{ request()->routeIs('admin.orders.*') ? 'active' : '' }}">
             <span class="nav-icon">🛒</span> Orders
         </a>
+        <a href="{{ route('admin.payments.index') }}" class="nav-link {{ request()->routeIs('admin.payments.*') ? 'active' : '' }}">
+            <span class="nav-icon">💳</span> Payments
+        </a>
         <a href="{{ route('admin.customers.index') }}" class="nav-link {{ request()->routeIs('admin.customers.*') ? 'active' : '' }}">
             <span class="nav-icon">👥</span> Customers
+        </a>
+        <a href="{{ route('admin.users.index') }}" class="nav-link {{ request()->routeIs('admin.users.*') ? 'active' : '' }}">
+            <span class="nav-icon">🛡️</span> Users
         </a>
 
         <div class="nav-section">Marketing</div>

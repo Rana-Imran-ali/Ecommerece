@@ -8,6 +8,7 @@ use App\Http\Controllers\CouponController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ReviewController;
+use App\Http\Controllers\StripeController;
 use App\Http\Controllers\WishlistController;
 use App\Http\Middleware\ApiAuthMiddleware;
 use Illuminate\Support\Facades\Route;
@@ -101,8 +102,12 @@ Route::middleware(ApiAuthMiddleware::class)->group(function () {
     // Orders & Checkout
     Route::prefix('orders')->group(function () {
         Route::get('/', [OrderController::class, 'index'])->name('api.orders.index');
-        Route::post('/', [OrderController::class, 'store'])->name('api.orders.store'); // Checkout
+        Route::post('/', [OrderController::class, 'store'])->name('api.orders.store'); // COD / Bank Transfer checkout
         Route::get('/{order}', [OrderController::class, 'show'])->name('api.orders.show');
         Route::patch('/{order}/cancel', [OrderController::class, 'cancel'])->name('api.orders.cancel');
     });
+
+    // Stripe – Card Payment
+    Route::post('/stripe/create-session', [StripeController::class, 'createSession'])
+        ->name('api.stripe.session');
 });

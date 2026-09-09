@@ -229,10 +229,36 @@
         btn.disabled = true;
         btn.innerHTML = `<span class="inline-block animate-spin mr-2">⟳</span> Placing Order...`;
 
+        // ── Card payments → Stripe Checkout Session ──────────────────────────
+        if (payment_method === 'card') {
+            const payload = {
+                address_id:  parseInt(addrInput.value),
+                coupon_code: appliedCoupon ? appliedCoupon.code : null,
+            };
+
+            const res = await apiFetch('/api/stripe/create-session', {
+                method: 'POST',
+                body: JSON.stringify(payload)
+            });
+
+            if (res.ok && res.data?.session_url) {
+                showAlert('checkout-alert', 'Redirecting to secure payment...', 'success');
+                // Redirect to Stripe hosted checkout page
+                window.location.href = res.data.session_url;
+            } else {
+                btn.disabled = false;
+                btn.textContent = 'Place Order Now';
+                showAlert('checkout-alert', res.data?.message || 'Failed to initiate payment. Please try again.', 'danger');
+            }
+
+            return; // stop here for card payments
+        }
+
+        // ── COD / Bank Transfer → existing order API ─────────────────────────
         const payload = {
-            address_id: parseInt(addrInput.value),
+            address_id:     parseInt(addrInput.value),
             payment_method: payment_method,
-            coupon_code: appliedCoupon ? appliedCoupon.code : null,
+            coupon_code:    appliedCoupon ? appliedCoupon.code : null,
         };
 
         const res = await apiFetch('/api/orders', {

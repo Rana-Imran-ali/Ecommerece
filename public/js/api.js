@@ -308,9 +308,26 @@ function updateNavAuthUI() {
 
 // Global logout/signout handler
 async function handleSignOut() {
-    await apiFetch('/api/logout', { method: 'POST' });
+    try {
+        await apiFetch('/api/logout', { method: 'POST' });
+    } catch (e) {}
     clearAuth();
-    window.location.href = '/login';
+    sessionStorage.setItem('logged_out', '1');
+
+    // Submit Laravel web session logout via POST to destroy PHP session
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '/logout';
+    if (csrfToken) {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = '_token';
+        input.value = csrfToken;
+        form.appendChild(input);
+    }
+    document.body.appendChild(form);
+    form.submit();
 }
 const handleLogout = handleSignOut;
 

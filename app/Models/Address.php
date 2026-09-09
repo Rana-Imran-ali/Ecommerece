@@ -28,4 +28,12 @@ class Address extends Model
     {
         return $this->belongsTo(User::class);
     }
+
+    /**
+     * Backward-compatible accessor for street address
+     */
+    public function getStreetAttribute(): string
+    {
+        return trim($this->address_line1 . ($this->address_line2 ? ', ' . $this->address_line2 : ''));
+    }
 }

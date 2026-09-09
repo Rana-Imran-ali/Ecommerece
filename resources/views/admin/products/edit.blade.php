@@ -77,16 +77,9 @@
                     @endif
                     <div style="display:flex;gap:4px;margin-top:4px">
                         @if(!$img->is_primary)
-                        <form method="POST" action="{{ route('admin.products.images.primary', [$product, $img]) }}">
-                            @csrf @method('PATCH')
-                            <button type="submit" class="btn btn-xs btn-outline" title="Set as primary">★</button>
-                        </form>
+                            <button type="submit" form="form-primary-{{ $img->id }}" class="btn btn-xs btn-outline" title="Set as primary">★</button>
                         @endif
-                        <form method="POST" action="{{ route('admin.products.images.delete', [$product, $img]) }}"
-                              onsubmit="return confirm('Delete image?')">
-                            @csrf @method('DELETE')
-                            <button type="submit" class="btn btn-xs btn-danger">✕</button>
-                        </form>
+                        <button type="submit" form="form-delete-{{ $img->id }}" class="btn btn-xs btn-danger" title="Delete image" onclick="return confirm('Delete image?')">✕</button>
                     </div>
                 </div>
                 @empty
@@ -109,17 +102,27 @@
                         <tr><th>Date</th><th>Type</th><th>Qty</th><th>Before→After</th><th>By</th><th>Notes</th></tr>
                     </thead>
                     <tbody>
-                        @forelse($product->inventoryLogs as $log)
+                        @forelse($product->inventoryLogs->take(10) as $log)
                         <tr>
-                            <td class="text-sm text-muted">{{ $log->created_at->format('M d, Y H:i') }}</td>
-                            <td><span class="badge badge-blue">{{ str_replace('_', ' ', $log->type) }}</span></td>
-                            <td><strong>{{ $log->quantity }}</strong></td>
-                            <td class="text-sm">{{ $log->quantity_before }} → {{ $log->quantity_after }}</td>
+                            <td class="text-sm text-muted">{{ $log->created_at->format('M d, H:i') }}</td>
+                            <td>
+                                @php
+                                    $bCls = match($log->type) {
+                                        'stock_in', 'adjustment_in' => 'badge-green',
+                                        'sale' => 'badge-blue',
+                                        'stock_out', 'damaged', 'adjustment_out' => 'badge-red',
+                                        default => 'badge-yellow',
+                                    };
+                                @endphp
+                                <span class="badge {{ $bCls }}">{{ ucwords(str_replace('_', ' ', $log->type)) }}</span>
+                            </td>
+                            <td><strong>{{ $log->quantity > 0 ? '+'.$log->quantity : $log->quantity }}</strong></td>
+                            <td class="text-sm text-muted">{{ $log->stock_before }} → {{ $log->stock_after }}</td>
                             <td class="text-sm">{{ $log->user?->name ?? 'System' }}</td>
                             <td class="text-sm text-muted">{{ $log->notes ?? '—' }}</td>
                         </tr>
                         @empty
-                        <tr><td colspan="6" class="text-muted text-sm" style="text-align:center;padding:16px">No inventory history.</td></tr>
+                        <tr><td colspan="6" class="text-muted text-sm" style="text-align:center;padding:16px">No inventory history yet.</td></tr>
                         @endforelse
                     </tbody>
                 </table>
@@ -132,13 +135,25 @@
         <div class="card">
             <div class="card-title mb-16">Publish</div>
             <button type="submit" class="btn btn-primary w-full mb-16">💾 Update Product</button>
-            <form method="POST" action="{{ route('admin.products.destroy', $product) }}"
-                  onsubmit="return confirm('Permanently delete this product?')">
-                @csrf @method('DELETE')
-                <button type="submit" class="btn btn-danger w-full">🗑 Delete Product</button>
-            </form>
+            <button type="submit" form="form-delete-product" class="btn btn-danger w-full" onclick="return confirm('Permanently delete this product?')">🗑 Delete Product</button>
         </div>
     </div>
 </div>
+</form>
+
+<!-- External Forms for Images and Deletion (Prevents Illegal Nested Forms) -->
+@foreach($product->images as $img)
+    @if(!$img->is_primary)
+    <form id="form-primary-{{ $img->id }}" method="POST" action="{{ route('admin.products.images.primary', [$product, $img]) }}" style="display:none">
+        @csrf @method('PATCH')
+    </form>
+    @endif
+    <form id="form-delete-{{ $img->id }}" method="POST" action="{{ route('admin.products.images.delete', [$product, $img]) }}" style="display:none">
+        @csrf @method('DELETE')
+    </form>
+@endforeach
+
+<form id="form-delete-product" method="POST" action="{{ route('admin.products.destroy', $product) }}" style="display:none">
+    @csrf @method('DELETE')
 </form>
 @endsection
