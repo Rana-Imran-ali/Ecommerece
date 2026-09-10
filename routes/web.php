@@ -43,14 +43,23 @@ Route::view('/categories', 'categories.index')->name('categories.index');
 Route::view('/about', 'about')->name('about');
 Route::view('/contact', 'contact')->name('contact');
 Route::post('/contact', function (Request $request) {
-    $request->validate([
+    $validated = $request->validate([
         'name' => 'required|string|max:255',
         'email' => 'required|email|max:255',
         'subject' => 'required|string|max:255',
         'message' => 'required|string|max:2000',
     ]);
+
+    \App\Models\ContactInquiry::create([
+        'name'    => $validated['name'],
+        'email'   => $validated['email'],
+        'subject' => $validated['subject'],
+        'message' => $validated['message'],
+        'status'  => 'unread',
+    ]);
+
     return back()->with('success', 'Thank you for reaching out! Your message has been received and our team will get back to you shortly.');
-})->name('contact.submit');
+})->middleware('throttle:15,1')->name('contact.submit');
 
 // Shopping Cart & Checkout Flow
 Route::view('/cart', 'cart.index')->name('cart.index');

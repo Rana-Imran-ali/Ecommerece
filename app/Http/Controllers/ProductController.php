@@ -198,7 +198,10 @@ class ProductController extends Controller
                 }
             }
 
-            // Delete product (database foreign key cascades image records)
+            // Delete product images records
+            $product->images()->delete();
+
+            // Soft-delete product
             $product->delete();
         });
 

@@ -149,6 +149,7 @@ class ProductController extends Controller
         foreach ($product->images as $img) {
             Storage::disk('public')->delete($img->image);
         }
+        $product->images()->delete();
         $product->delete();
 
         return redirect()->route('admin.products.index')

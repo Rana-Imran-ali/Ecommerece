@@ -6,6 +6,7 @@ use App\Models\Address;
 use App\Models\Cart;
 use App\Models\Coupon;
 use App\Models\CouponUsage;
+use App\Models\InventoryLog;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Payment;
@@ -13,6 +14,8 @@ use App\Models\Product;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Validator;
 use Symfony\Component\HttpFoundation\Response;
 
 class OrderController extends Controller
@@ -68,14 +71,29 @@ class OrderController extends Controller
     public function store(Request $request): JsonResponse
     {
         $user = $request->user();
+        $paymentMethod = $request->input('payment_method');
 
-        $validated = $request->validate([
-            'address_id' => ['required', 'integer', 'exists:addresses,id'],
-            'payment_method' => ['required', 'string', 'in:cod,card,bank_transfer'],
-            'coupon_code' => ['nullable', 'string'],
-        ]);
+        // ── 1. Shared base validation ─────────────────────────────────────────
+        $baseRules = [
+            'address_id'     => ['required', 'integer', 'exists:addresses,id'],
+            'payment_method' => ['required', 'string', 'in:cod,bank_transfer,card'],
+            'coupon_code'    => ['nullable', 'string'],
+        ];
 
-        // Security: Ensure address belongs to the authenticated user
+        // ── 2. Per-method additional validation rules ─────────────────────────
+        if ($paymentMethod === 'card') {
+            // Card: require the confirmed Stripe PaymentIntent ID (client confirms card via Stripe.js first)
+            $baseRules['stripe_payment_intent_id'] = ['required', 'string', 'starts_with:pi_'];
+        } elseif ($paymentMethod === 'bank_transfer') {
+            // Bank Transfer: require sender details and transaction reference
+            $baseRules['sender_bank']           = ['required', 'string', 'max:100'];
+            $baseRules['sender_name']           = ['required', 'string', 'max:150'];
+            $baseRules['transaction_reference'] = ['required', 'string', 'max:100'];
+        }
+
+        $validated = $request->validate($baseRules);
+
+        // ── 3. Verify address ownership ───────────────────────────────────────
         $address = Address::where('id', $validated['address_id'])
             ->where('user_id', $user->id)
             ->first();
@@ -87,7 +105,7 @@ class OrderController extends Controller
             ], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
-        // Fetch user cart
+        // ── 4. Fetch user cart ────────────────────────────────────────────────
         $cart = Cart::where('user_id', $user->id)
             ->with(['items.product'])
             ->first();
@@ -99,12 +117,12 @@ class OrderController extends Controller
             ], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
-        // Validate stock availability for all cart items
+        // ── 5. Pre-flight stock check ─────────────────────────────────────────
         foreach ($cart->items as $item) {
             if (!$item->product) {
                 return response()->json([
                     'success' => false,
-                    'message' => "A product in your cart is no longer available.",
+                    'message' => 'A product in your cart is no longer available.',
                 ], Response::HTTP_UNPROCESSABLE_ENTITY);
             }
 
@@ -116,13 +134,64 @@ class OrderController extends Controller
             }
         }
 
-        // Calculate Subtotal
-        $subtotal = $cart->items->sum(function ($item) {
-            return (float) $item->product->price * $item->quantity;
-        });
+        // ── 6. For card payments: verify the Stripe PaymentIntent succeeded ───
+        $stripePaymentIntentId = null;
+        $paymentDetails        = null;
+        $transactionReference  = null;
 
-        // Optional Coupon Calculation
-        $coupon = null;
+        if ($paymentMethod === 'card') {
+            $stripePaymentIntentId = $validated['stripe_payment_intent_id'];
+
+            try {
+                $stripe = new \Stripe\StripeClient(config('services.stripe.secret'));
+                $intent = $stripe->paymentIntents->retrieve($stripePaymentIntentId);
+
+                // Ensure the PaymentIntent succeeded and belongs to this amount range
+                if ($intent->status !== 'succeeded') {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Card payment was not completed. Please try again.',
+                    ], Response::HTTP_UNPROCESSABLE_ENTITY);
+                }
+
+                // Capture safe, non-sensitive payment details for records
+                $charge         = $intent->latest_charge ?? null;
+                $cardBrand      = null;
+                $cardLast4      = null;
+                $cardholderName = null;
+
+                if ($charge && isset($intent->charges->data[0])) {
+                    $chargeData     = $intent->charges->data[0];
+                    $cardBrand      = $chargeData->payment_method_details->card->brand ?? null;
+                    $cardLast4      = $chargeData->payment_method_details->card->last4 ?? null;
+                    $cardholderName = $chargeData->billing_details->name ?? null;
+                }
+
+                $transactionReference = $stripePaymentIntentId;
+                $paymentDetails = [
+                    'brand'            => $cardBrand,
+                    'last4'            => $cardLast4,
+                    'cardholder_name'  => $cardholderName,
+                ];
+
+            } catch (\Exception $e) {
+                Log::error('Stripe PaymentIntent verification failed', ['error' => $e->getMessage()]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unable to verify payment. Please contact support if the issue persists.',
+                ], Response::HTTP_UNPROCESSABLE_ENTITY);
+            }
+        } elseif ($paymentMethod === 'bank_transfer') {
+            $transactionReference = $validated['transaction_reference'];
+            $paymentDetails = [
+                'sender_bank' => $validated['sender_bank'],
+                'sender_name' => $validated['sender_name'],
+            ];
+        }
+
+        // ── 7. Optional Coupon Calculation ────────────────────────────────────
+        $subtotal       = $cart->items->sum(fn($i) => (float) $i->product->price * $i->quantity);
+        $coupon         = null;
         $discountAmount = 0.0;
 
         if (!empty($validated['coupon_code'])) {
@@ -130,81 +199,146 @@ class OrderController extends Controller
                 ->where('is_active', true)
                 ->first();
 
-            if ($coupon) {
-                if ($coupon->min_order_amount && $subtotal < (float) $coupon->min_order_amount) {
-                    return response()->json([
-                        'success' => false,
-                        'message' => "Coupon requires a minimum order amount of $" . number_format($coupon->min_order_amount, 2),
-                    ], Response::HTTP_UNPROCESSABLE_ENTITY);
-                }
-
-                $discountAmount = ($subtotal * (float) $coupon->discount_percent) / 100;
-                if ($coupon->max_discount && $discountAmount > (float) $coupon->max_discount) {
-                    $discountAmount = (float) $coupon->max_discount;
-                }
-            } else {
+            if (!$coupon) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Invalid or expired coupon code.',
                 ], Response::HTTP_UNPROCESSABLE_ENTITY);
             }
+
+            $alreadyUsed = CouponUsage::where('coupon_id', $coupon->id)
+                ->where('user_id', $user->id)
+                ->exists();
+
+            if ($alreadyUsed) {
+                return response()->json([
+                    'success' => false,
+                    'message' => "You have already redeemed coupon '{$coupon->code}'. Each coupon can only be used once per customer.",
+                ], Response::HTTP_UNPROCESSABLE_ENTITY);
+            }
+
+            if ($coupon->min_order_amount && $subtotal < (float) $coupon->min_order_amount) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Coupon requires a minimum order amount of $' . number_format($coupon->min_order_amount, 2),
+                ], Response::HTTP_UNPROCESSABLE_ENTITY);
+            }
+
+            $discountAmount = ($subtotal * (float) $coupon->discount_percent) / 100;
+            if ($coupon->max_discount && $discountAmount > (float) $coupon->max_discount) {
+                $discountAmount = (float) $coupon->max_discount;
+            }
         }
 
         $totalAmount = max(0, round($subtotal - $discountAmount, 2));
 
-        // Execute Order Placement in Database Transaction
-        $order = DB::transaction(function () use ($user, $address, $cart, $totalAmount, $validated, $coupon) {
-            // 1. Create Order
-            $order = Order::create([
-                'user_id' => $user->id,
-                'address_id' => $address->id,
-                'status' => 'pending',
-                'total_amount' => $totalAmount,
-            ]);
-
-            // 2. Transfer Cart Items to Order Items and Decrement Stock
-            foreach ($cart->items as $cartItem) {
-                OrderItem::create([
-                    'order_id' => $order->id,
-                    'product_id' => $cartItem->product_id,
-                    'quantity' => $cartItem->quantity,
-                    'price' => (float) $cartItem->product->price,
+        // ── 8. Card payment: verify amount consistency ────────────────────────
+        if ($paymentMethod === 'card' && isset($intent)) {
+            $intentAmountCents  = (int) $intent->amount;
+            $expectedAmountCents = (int) round($totalAmount * 100);
+            // Allow ±1 cent rounding tolerance
+            if (abs($intentAmountCents - $expectedAmountCents) > 1) {
+                Log::warning('PaymentIntent amount mismatch', [
+                    'user_id'  => $user->id,
+                    'intent'   => $intentAmountCents,
+                    'expected' => $expectedAmountCents,
                 ]);
-
-                // Lock and decrement product stock
-                Product::where('id', $cartItem->product_id)
-                    ->decrement('stock', $cartItem->quantity);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Payment amount mismatch. Please restart the checkout.',
+                ], Response::HTTP_UNPROCESSABLE_ENTITY);
             }
+        }
 
-            // 3. Record Coupon Usage if applied
-            if ($coupon) {
-                CouponUsage::create([
-                    'coupon_id' => $coupon->id,
-                    'user_id' => $user->id,
-                    'order_id' => $order->id,
-                ]);
-            }
+        // ── 9. Execute Order Placement in Database Transaction ────────────────
+        try {
+            $order = DB::transaction(
+                function () use (
+                    $user, $address, $cart, $totalAmount, $validated, $coupon,
+                    $paymentMethod, $stripePaymentIntentId, $transactionReference, $paymentDetails
+                ) {
+                    $order = Order::create([
+                        'user_id'      => $user->id,
+                        'address_id'   => $address->id,
+                        'status'       => 'pending',
+                        'total_amount' => $totalAmount,
+                    ]);
 
-            // 4. Create Payment Record
-            Payment::create([
-                'order_id' => $order->id,
-                'payment_method' => $validated['payment_method'],
-                'amount' => $totalAmount,
-                'status' => $validated['payment_method'] === 'cod' ? 'pending' : 'completed',
-            ]);
+                    foreach ($cart->items as $cartItem) {
+                        $product = Product::where('id', $cartItem->product_id)->lockForUpdate()->first();
 
-            // 5. Clear Cart Items
-            $cart->items()->delete();
+                        if (!$product || $product->stock < $cartItem->quantity) {
+                            throw new \RuntimeException("Insufficient stock for '{$cartItem->product->name}'. Available: " . ($product->stock ?? 0));
+                        }
 
-            return $order;
-        });
+                        $beforeStock = (int) $product->stock;
+                        $afterStock  = $beforeStock - $cartItem->quantity;
+                        $product->update(['stock' => $afterStock]);
+
+                        OrderItem::create([
+                            'order_id'     => $order->id,
+                            'product_id'   => $cartItem->product_id,
+                            'product_name' => $product->name,
+                            'quantity'     => $cartItem->quantity,
+                            'price'        => (float) $product->price,
+                        ]);
+
+                        InventoryLog::create([
+                            'product_id'      => $product->id,
+                            'user_id'         => $user->id,
+                            'type'            => 'sale',
+                            'quantity'        => -$cartItem->quantity,
+                            'quantity_before' => $beforeStock,
+                            'quantity_after'  => $afterStock,
+                            'reference_id'    => (string) $order->id,
+                            'notes'           => "Order #{$order->id} placed via " . strtoupper($paymentMethod),
+                        ]);
+                    }
+
+                    if ($coupon) {
+                        CouponUsage::create([
+                            'coupon_id' => $coupon->id,
+                            'user_id'   => $user->id,
+                            'order_id'  => $order->id,
+                        ]);
+                    }
+
+                    // Determine payment status based on method
+                    $paymentStatus = $paymentMethod === 'card' ? 'completed' : 'pending';
+
+                    Payment::create([
+                        'order_id'                => $order->id,
+                        'payment_method'          => $paymentMethod,
+                        'amount'                  => $totalAmount,
+                        'status'                  => $paymentStatus,
+                        'stripe_payment_intent_id'=> $stripePaymentIntentId,
+                        'transaction_reference'   => $transactionReference,
+                        'payment_details'         => $paymentDetails,
+                    ]);
+
+                    // Card orders: mark order as processing immediately
+                    if ($paymentMethod === 'card') {
+                        $order->update(['status' => 'processing']);
+                    }
+
+                    $cart->items()->delete();
+
+                    return $order;
+                }
+            );
+        } catch (\RuntimeException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
 
         $order->load(['items.product.primaryImage', 'address', 'payments', 'couponUsages.coupon']);
 
         return response()->json([
             'success' => true,
             'message' => 'Order placed successfully.',
-            'data' => $order,
+            'data'    => $order,
         ], Response::HTTP_CREATED);
     }
 
@@ -228,11 +362,26 @@ class OrderController extends Controller
             ], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
-        DB::transaction(function () use ($order) {
-            // Restore inventory stock for each item
+        DB::transaction(function () use ($order, $request) {
+            // Restore inventory stock for each item with pessimistic lock
             foreach ($order->items as $item) {
-                Product::where('id', $item->product_id)
-                    ->increment('stock', $item->quantity);
+                $product = Product::where('id', $item->product_id)->lockForUpdate()->first();
+                if ($product) {
+                    $before = (int) $product->stock;
+                    $after  = $before + $item->quantity;
+                    $product->update(['stock' => $after]);
+
+                    InventoryLog::create([
+                        'product_id'      => $product->id,
+                        'user_id'         => $request->user()->id,
+                        'type'            => 'return',
+                        'quantity'        => $item->quantity,
+                        'quantity_before' => $before,
+                        'quantity_after'  => $after,
+                        'reference_id'    => (string) $order->id,
+                        'notes'           => "Stock restored due to customer order #{$order->id} cancellation",
+                    ]);
+                }
             }
 
             // Update order and payment status

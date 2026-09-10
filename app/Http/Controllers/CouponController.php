@@ -48,6 +48,21 @@ class CouponController extends Controller
             ], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
+        // Check if user already used this coupon (if authenticated)
+        $user = $request->user();
+        if ($user) {
+            $alreadyUsed = \App\Models\CouponUsage::where('coupon_id', $coupon->id)
+                ->where('user_id', $user->id)
+                ->exists();
+
+            if ($alreadyUsed) {
+                return response()->json([
+                    'success' => false,
+                    'message' => "You have already redeemed coupon '{$coupon->code}'. Each coupon can only be used once per customer.",
+                ], Response::HTTP_UNPROCESSABLE_ENTITY);
+            }
+        }
+
         if ($coupon->min_order_amount && $subtotal < (float) $coupon->min_order_amount) {
             return response()->json([
                 'success' => false,

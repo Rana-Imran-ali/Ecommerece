@@ -16,6 +16,16 @@ class PerformanceAndOptimizationTest extends TestCase
 {
     use RefreshDatabase;
 
+    private User $admin;
+    private string $adminToken;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->admin = User::factory()->create(['role' => 'admin']);
+        $this->adminToken = \Illuminate\Support\Facades\Crypt::encryptString("{$this->admin->id}|" . time());
+    }
+
     public function test_categories_are_cached_and_invalidated_on_mutation(): void
     {
         Cache::flush();
@@ -42,7 +52,8 @@ class PerformanceAndOptimizationTest extends TestCase
         $this->assertCount(2, $res2->json('data'));
 
         // Model mutation through API invalidates cache
-        $resStore = $this->postJson('/api/categories', ['name' => 'Accessories']);
+        $resStore = $this->withHeader('Authorization', "Bearer {$this->adminToken}")
+            ->postJson('/api/categories', ['name' => 'Accessories']);
         $resStore->assertCreated();
         $this->assertFalse(Cache::has('categories.all'));
 
@@ -102,13 +113,14 @@ class PerformanceAndOptimizationTest extends TestCase
         $this->assertTrue(Cache::has('categories.all'));
 
         // Create product
-        $res = $this->postJson('/api/products', [
-            'category_id' => $cat->id,
-            'name' => 'DSLR Camera',
-            'description' => 'Professional 4K camera',
-            'price' => 799.99,
-            'stock' => 5,
-        ]);
+        $res = $this->withHeader('Authorization', "Bearer {$this->adminToken}")
+            ->postJson('/api/products', [
+                'category_id' => $cat->id,
+                'name' => 'DSLR Camera',
+                'description' => 'Professional 4K camera',
+                'price' => 799.99,
+                'stock' => 5,
+            ]);
         $res->assertCreated();
 
         // Categories cache should be cleared

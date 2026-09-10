@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules\Password;
@@ -81,6 +82,12 @@ class AuthController extends Controller
      */
     public function logout(Request $request): JsonResponse
     {
+        $token = $request->bearerToken();
+        if ($token) {
+            // Blacklist the token for 30 days
+            Cache::put('token_blacklist_' . sha1($token), true, now()->addDays(30));
+        }
+
         return response()->json([
             'success' => true,
             'message' => 'Logged out successfully.',

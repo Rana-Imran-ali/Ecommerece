@@ -75,7 +75,7 @@
             <div class="card-title mb-16">Saved Addresses ({{ $user->addresses->count() }})</div>
             @forelse($user->addresses as $addr)
             <div style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:8px;font-size:0.875rem;line-height:1.6">
-                <div><strong>{{ $addr->recipient_name ?? $user->name }}</strong> @if($addr->phone) <span class="text-muted text-sm">({{ $addr->phone }})</span>@endif</div>
+                <div><strong>{{ $addr->name ?? $user->name }}</strong> @if($addr->phone) <span class="text-muted text-sm">({{ $addr->phone }})</span>@endif</div>
                 <div class="text-muted">{{ $addr->street }}, {{ $addr->city }}, {{ $addr->state }} {{ $addr->postal_code }}, {{ $addr->country }}</div>
                 @if($addr->is_default)
                     <span class="badge badge-green" style="margin-top:6px">Default Address</span>

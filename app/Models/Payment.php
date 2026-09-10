@@ -14,10 +14,13 @@ class Payment extends Model
         'status',
         'stripe_session_id',
         'stripe_payment_intent_id',
+        'transaction_reference',
+        'payment_details',
     ];
 
     protected $casts = [
         'amount' => 'decimal:2',
+        'payment_details' => 'array',
     ];
 
     public function order(): BelongsTo

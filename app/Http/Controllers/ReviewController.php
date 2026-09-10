@@ -16,6 +16,7 @@ class ReviewController extends Controller
     public function index(Product $product): JsonResponse
     {
         $reviews = Review::where('product_id', $product->id)
+            ->where('status', 'approved')
             ->with('user:id,name')
             ->latest('id')
             ->get();
@@ -53,6 +54,7 @@ class ReviewController extends Controller
             [
                 'rating' => $validated['rating'],
                 'comment' => $validated['comment'] ?? null,
+                'status' => 'approved',
             ]
         );
 

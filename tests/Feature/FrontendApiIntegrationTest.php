@@ -120,8 +120,16 @@ class FrontendApiIntegrationTest extends TestCase
             ->assertJsonPath('success', true)
             ->assertJsonCount(1, 'data');
 
-        // Create new category
-        $createRes = $this->withHeader('Authorization', "Bearer {$this->token}")
+        // Customer cannot create category
+        $this->withHeader('Authorization', "Bearer {$this->token}")
+            ->postJson('/api/categories', ['name' => 'Smartphones'])
+            ->assertForbidden();
+
+        // Admin can create category
+        $admin = User::factory()->create(['role' => 'admin']);
+        $adminToken = Crypt::encryptString("{$admin->id}|" . time());
+
+        $createRes = $this->withHeader('Authorization', "Bearer {$adminToken}")
             ->postJson('/api/categories', ['name' => 'Smartphones']);
         $createRes->assertCreated();
     }

@@ -15,11 +15,15 @@ class ProductControllerTest extends TestCase
     use RefreshDatabase;
 
     private Category $category;
+    private \App\Models\User $admin;
+    private string $adminToken;
 
     protected function setUp(): void
     {
         parent::setUp();
         $this->category = Category::create(['name' => 'Electronics']);
+        $this->admin = \App\Models\User::factory()->create(['role' => 'admin']);
+        $this->adminToken = \Illuminate\Support\Facades\Crypt::encryptString("{$this->admin->id}|" . time());
     }
 
     public function test_can_list_products_with_filters_and_search(): void
@@ -59,6 +63,29 @@ class ProductControllerTest extends TestCase
             ->assertJsonPath('data.0.name', 'Mechanical Keyboard');
     }
 
+    public function test_unauthenticated_user_cannot_create_or_modify_products(): void
+    {
+        // Guests cannot create
+        $this->postJson('/api/products', [
+            'category_id' => $this->category->id,
+            'name' => 'Sneaky Product',
+            'price' => 10,
+            'stock' => 1,
+        ])->assertUnauthorized();
+
+        // Regular customer cannot create
+        $customer = \App\Models\User::factory()->create(['role' => 'customer']);
+        $customerToken = \Illuminate\Support\Facades\Crypt::encryptString("{$customer->id}|" . time());
+
+        $this->withHeader('Authorization', "Bearer {$customerToken}")
+            ->postJson('/api/products', [
+                'category_id' => $this->category->id,
+                'name' => 'Sneaky Product',
+                'price' => 10,
+                'stock' => 1,
+            ])->assertForbidden();
+    }
+
     public function test_can_create_product_with_validation_and_images(): void
     {
         Storage::fake('public');
@@ -76,7 +103,8 @@ class ProductControllerTest extends TestCase
             'primary_image_index' => 0,
         ];
 
-        $response = $this->postJson('/api/products', $payload);
+        $response = $this->withHeader('Authorization', "Bearer {$this->adminToken}")
+            ->postJson('/api/products', $payload);
 
         $response->assertCreated()
             ->assertJsonPath('success', true)
@@ -93,12 +121,13 @@ class ProductControllerTest extends TestCase
 
     public function test_create_product_fails_with_invalid_data(): void
     {
-        $response = $this->postJson('/api/products', [
-            'name' => '',
-            'price' => -10,
-            'stock' => -5,
-            'category_id' => 99999, // non-existent
-        ]);
+        $response = $this->withHeader('Authorization', "Bearer {$this->adminToken}")
+            ->postJson('/api/products', [
+                'name' => '',
+                'price' => -10,
+                'stock' => -5,
+                'category_id' => 99999, // non-existent
+            ]);
 
         $response->assertUnprocessable()
             ->assertJsonValidationErrors(['name', 'price', 'stock', 'category_id']);
@@ -132,10 +161,11 @@ class ProductControllerTest extends TestCase
             'stock' => 5,
         ]);
 
-        $response = $this->putJson("/api/products/{$product->id}", [
-            'name' => 'Updated 4K Monitor',
-            'price' => 299.99,
-        ]);
+        $response = $this->withHeader('Authorization', "Bearer {$this->adminToken}")
+            ->putJson("/api/products/{$product->id}", [
+                'name' => 'Updated 4K Monitor',
+                'price' => 299.99,
+            ]);
 
         $response->assertOk()
             ->assertJsonPath('data.name', 'Updated 4K Monitor');
@@ -168,10 +198,11 @@ class ProductControllerTest extends TestCase
             'is_primary' => true,
         ]);
 
-        $response = $this->deleteJson("/api/products/{$product->id}");
+        $response = $this->withHeader('Authorization', "Bearer {$this->adminToken}")
+            ->deleteJson("/api/products/{$product->id}");
 
         $response->assertOk();
-        $this->assertDatabaseMissing('products', ['id' => $product->id]);
+        $this->assertSoftDeleted('products', ['id' => $product->id]);
         $this->assertDatabaseMissing('product_images', ['image' => $imagePath]);
         Storage::disk('public')->assertMissing($imagePath);
     }
@@ -188,18 +219,20 @@ class ProductControllerTest extends TestCase
         ]);
 
         // Upload first image
-        $uploadResponse = $this->postJson("/api/products/{$product->id}/images", [
-            'image' => UploadedFile::fake()->create('watch1.jpg', 100, 'image/jpeg'),
-        ]);
+        $uploadResponse = $this->withHeader('Authorization', "Bearer {$this->adminToken}")
+            ->postJson("/api/products/{$product->id}/images", [
+                'image' => UploadedFile::fake()->create('watch1.jpg', 100, 'image/jpeg'),
+            ]);
 
         $uploadResponse->assertCreated();
         $firstImageId = $uploadResponse->json('data.0.id');
 
         // Upload second image and designate as primary
-        $secondUpload = $this->postJson("/api/products/{$product->id}/images", [
-            'image' => UploadedFile::fake()->create('watch2.jpg', 100, 'image/jpeg'),
-            'is_primary' => true,
-        ]);
+        $secondUpload = $this->withHeader('Authorization', "Bearer {$this->adminToken}")
+            ->postJson("/api/products/{$product->id}/images", [
+                'image' => UploadedFile::fake()->create('watch2.jpg', 100, 'image/jpeg'),
+                'is_primary' => true,
+            ]);
 
         $secondUpload->assertCreated();
         $secondImageId = $secondUpload->json('data.0.id');
@@ -248,18 +281,20 @@ class ProductControllerTest extends TestCase
         ]);
 
         // Decrement stock
-        $decResponse = $this->patchJson("/api/products/{$product->id}/stock", [
-            'action' => 'decrement',
-            'amount' => 4,
-        ]);
+        $decResponse = $this->withHeader('Authorization', "Bearer {$this->adminToken}")
+            ->patchJson("/api/products/{$product->id}/stock", [
+                'action' => 'decrement',
+                'amount' => 4,
+            ]);
         $decResponse->assertOk()
             ->assertJsonPath('data.stock', 6);
 
         // Cannot reduce below zero
-        $invalidDec = $this->patchJson("/api/products/{$product->id}/stock", [
-            'action' => 'decrement',
-            'amount' => 10,
-        ]);
+        $invalidDec = $this->withHeader('Authorization', "Bearer {$this->adminToken}")
+            ->patchJson("/api/products/{$product->id}/stock", [
+                'action' => 'decrement',
+                'amount' => 10,
+            ]);
         $invalidDec->assertStatus(422);
     }
 }

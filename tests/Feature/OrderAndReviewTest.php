@@ -131,6 +131,62 @@ class OrderAndReviewTest extends TestCase
         $this->assertDatabaseCount('cart_items', 0);
     }
 
+    public function test_checkout_rejects_card_without_payment_intent(): void
+    {
+        $cart = Cart::create(['user_id' => $this->user1->id]);
+        CartItem::create([
+            'cart_id'    => $cart->id,
+            'product_id' => $this->product->id,
+            'quantity'   => 1,
+        ]);
+
+        // Card payment without a stripe_payment_intent_id must fail validation
+        $response = $this->withHeader('Authorization', "Bearer {$this->token1}")
+            ->postJson('/api/orders', [
+                'address_id'     => $this->address1->id,
+                'payment_method' => 'card',
+                // stripe_payment_intent_id intentionally omitted
+            ]);
+
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors(['stripe_payment_intent_id']);
+
+    }
+
+    public function test_checkout_rejects_duplicate_coupon_usage(): void
+    {
+        // Simulate that user1 already redeemed this coupon
+        $prevOrder = Order::create([
+            'user_id' => $this->user1->id,
+            'address_id' => $this->address1->id,
+            'status' => 'completed',
+            'total_amount' => 50.00,
+        ]);
+
+        \App\Models\CouponUsage::create([
+            'coupon_id' => $this->coupon->id,
+            'user_id' => $this->user1->id,
+            'order_id' => $prevOrder->id,
+        ]);
+
+        $cart = Cart::create(['user_id' => $this->user1->id]);
+        CartItem::create([
+            'cart_id' => $cart->id,
+            'product_id' => $this->product->id,
+            'quantity' => 1,
+        ]);
+
+        $response = $this->withHeader('Authorization', "Bearer {$this->token1}")
+            ->postJson('/api/orders', [
+                'address_id' => $this->address1->id,
+                'payment_method' => 'cod',
+                'coupon_code' => $this->coupon->code,
+            ]);
+
+        $response->assertStatus(422)
+            ->assertJsonPath('success', false);
+    }
+
     public function test_checkout_rejects_unowned_address(): void
     {
         $cart = Cart::create(['user_id' => $this->user1->id]);

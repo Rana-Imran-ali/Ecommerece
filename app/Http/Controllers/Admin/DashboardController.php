@@ -16,6 +16,7 @@ class DashboardController extends Controller
         // Revenue stats
         $totalRevenue = Order::where('status', 'delivered')->sum('total_amount');
         $monthRevenue = Order::where('status', 'delivered')
+            ->whereYear('created_at', now()->year)
             ->whereMonth('created_at', now()->month)
             ->sum('total_amount');
 
@@ -30,7 +31,9 @@ class DashboardController extends Controller
         $totalCustomers = User::where('role', 'customer')->orWhereNull('role')->count();
         $newCustomers   = User::where(function ($q) {
             $q->where('role', 'customer')->orWhereNull('role');
-        })->whereMonth('created_at', now()->month)->count();
+        })
+        ->whereYear('created_at', now()->year)
+        ->whereMonth('created_at', now()->month)->count();
 
         // Product / stock stats
         $totalProducts   = Product::count();
@@ -38,10 +41,13 @@ class DashboardController extends Controller
         $lowStock        = Product::where('status', 'active')->where('stock', '>', 0)->where('stock', '<=', 10)->count();
         $outOfStock      = Product::where('stock', 0)->count();
 
-        // Revenue chart (last 6 months)
+        // Revenue chart (last 6 months - Cross DB compatible)
+        $isSqlite = DB::connection()->getDriverName() === 'sqlite';
+        $monthExpr = $isSqlite ? "strftime('%Y-%m', created_at)" : "DATE_FORMAT(created_at, '%Y-%m')";
+
         $revenueChart = Order::where('status', 'delivered')
             ->where('created_at', '>=', now()->subMonths(6))
-            ->select(DB::raw("DATE_FORMAT(created_at, '%Y-%m') as month"), DB::raw('SUM(total_amount) as total'))
+            ->select(DB::raw("{$monthExpr} as month"), DB::raw('SUM(total_amount) as total'))
             ->groupBy('month')
             ->orderBy('month')
             ->pluck('total', 'month');

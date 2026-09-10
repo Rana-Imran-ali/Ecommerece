@@ -6,6 +6,7 @@ use App\Models\Address;
 use App\Models\Cart;
 use App\Models\Coupon;
 use App\Models\CouponUsage;
+use App\Models\InventoryLog;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Payment;
@@ -28,6 +29,124 @@ class StripeController extends Controller
         $this->stripe = new StripeClient(config('services.stripe.secret'));
     }
 
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // API: Create a Stripe PaymentIntent (for direct card checkout)
+    // POST /api/stripe/payment-intent
+    // Protected by ApiAuthMiddleware
+    // ─────────────────────────────────────────────────────────────────────────
+    public function createPaymentIntent(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        $validated = $request->validate([
+            'address_id'  => ['required', 'integer', 'exists:addresses,id'],
+            'coupon_code' => ['nullable', 'string'],
+        ]);
+
+        // Validate address ownership
+        $address = Address::where('id', $validated['address_id'])
+            ->where('user_id', $user->id)
+            ->first();
+
+        if (!$address) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Selected delivery address does not belong to your account.',
+            ], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        // Load cart
+        $cart = Cart::where('user_id', $user->id)
+            ->with(['items.product'])
+            ->first();
+
+        if (!$cart || $cart->items->isEmpty()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Your shopping cart is empty.',
+            ], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        // Calculate subtotal
+        $subtotal = $cart->items->sum(fn($i) => (float) $i->product->price * $i->quantity);
+
+        // Optional coupon discount
+        $discountAmount = 0.0;
+
+        if (!empty($validated['coupon_code'])) {
+            $coupon = Coupon::where('code', trim($validated['coupon_code']))
+                ->where('is_active', true)
+                ->first();
+
+            if (!$coupon) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid or expired coupon code.',
+                ], Response::HTTP_UNPROCESSABLE_ENTITY);
+            }
+
+            $alreadyUsed = CouponUsage::where('coupon_id', $coupon->id)
+                ->where('user_id', $user->id)
+                ->exists();
+
+            if ($alreadyUsed) {
+                return response()->json([
+                    'success' => false,
+                    'message' => "You have already redeemed coupon '{$coupon->code}'.",
+                ], Response::HTTP_UNPROCESSABLE_ENTITY);
+            }
+
+            if ($coupon->min_order_amount && $subtotal < (float) $coupon->min_order_amount) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Coupon requires a minimum order amount of $' . number_format($coupon->min_order_amount, 2),
+                ], Response::HTTP_UNPROCESSABLE_ENTITY);
+            }
+
+            $discountAmount = ($subtotal * (float) $coupon->discount_percent) / 100;
+            if ($coupon->max_discount && $discountAmount > (float) $coupon->max_discount) {
+                $discountAmount = (float) $coupon->max_discount;
+            }
+        }
+
+        $totalAmount = max(0, round($subtotal - $discountAmount, 2));
+        $amountCents = (int) round($totalAmount * 100);
+
+        if ($amountCents < 50) { // Stripe minimum is $0.50
+            return response()->json([
+                'success' => false,
+                'message' => 'Order total is below the minimum payment amount.',
+            ], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        try {
+            $intent = $this->stripe->paymentIntents->create([
+                'amount'   => $amountCents,
+                'currency' => 'usd',
+                'automatic_payment_methods' => ['enabled' => true],
+                'metadata' => [
+                    'user_id'      => $user->id,
+                    'address_id'   => $address->id,
+                    'coupon_code'  => $validated['coupon_code'] ?? '',
+                ],
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Stripe PaymentIntent creation failed', ['error' => $e->getMessage()]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Unable to initialize payment. Please try again.',
+            ], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
+
+        return response()->json([
+            'success'       => true,
+            'client_secret' => $intent->client_secret,
+            'intent_id'     => $intent->id,
+            'amount'        => $totalAmount,
+        ], Response::HTTP_OK);
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // API: Create a Stripe Checkout Session
     // POST /api/stripe/create-session
@@ -36,6 +155,7 @@ class StripeController extends Controller
     public function createSession(Request $request): JsonResponse
     {
         $user = $request->user();
+
 
         $validated = $request->validate([
             'address_id'   => ['required', 'integer', 'exists:addresses,id'],
@@ -101,6 +221,18 @@ class StripeController extends Controller
                 ], Response::HTTP_UNPROCESSABLE_ENTITY);
             }
 
+            // Enforce single-use restriction per customer
+            $alreadyUsed = CouponUsage::where('coupon_id', $coupon->id)
+                ->where('user_id', $user->id)
+                ->exists();
+
+            if ($alreadyUsed) {
+                return response()->json([
+                    'success' => false,
+                    'message' => "You have already redeemed coupon '{$coupon->code}'. Each coupon can only be used once per customer.",
+                ], Response::HTTP_UNPROCESSABLE_ENTITY);
+            }
+
             if ($coupon->min_order_amount && $subtotal < (float) $coupon->min_order_amount) {
                 return response()->json([
                     'success' => false,
@@ -116,73 +248,100 @@ class StripeController extends Controller
 
         $totalAmount = max(0, round($subtotal - $discountAmount, 2));
 
-        // ── 5. Create Order, Payment & clear cart (DB transaction) ─────────
-        $order = DB::transaction(function () use ($user, $address, $cart, $totalAmount, $validated, $coupon) {
+        // ── 5. Create Order, Payment & clear cart (DB transaction with pessimistic locks) ──
+        try {
+            $order = DB::transaction(function () use ($user, $address, $cart, $totalAmount, $validated, $coupon) {
 
-            $order = Order::create([
-                'user_id'      => $user->id,
-                'address_id'   => $address->id,
-                'status'       => 'pending',
-                'total_amount' => $totalAmount,
-            ]);
-
-            foreach ($cart->items as $cartItem) {
-                OrderItem::create([
-                    'order_id'   => $order->id,
-                    'product_id' => $cartItem->product_id,
-                    'quantity'   => $cartItem->quantity,
-                    'price'      => (float) $cartItem->product->price,
+                $order = Order::create([
+                    'user_id'      => $user->id,
+                    'address_id'   => $address->id,
+                    'status'       => 'pending',
+                    'total_amount' => $totalAmount,
                 ]);
 
-                Product::where('id', $cartItem->product_id)
-                    ->decrement('stock', $cartItem->quantity);
-            }
+                foreach ($cart->items as $cartItem) {
+                    $product = Product::where('id', $cartItem->product_id)->lockForUpdate()->first();
+                    if (!$product || $product->stock < $cartItem->quantity) {
+                        throw new \RuntimeException("Insufficient stock for '{$cartItem->product->name}'. Available: " . ($product->stock ?? 0));
+                    }
 
-            if ($coupon) {
-                CouponUsage::create([
-                    'coupon_id' => $coupon->id,
-                    'user_id'   => $user->id,
-                    'order_id'  => $order->id,
+                    $beforeStock = (int) $product->stock;
+                    $afterStock  = $beforeStock - $cartItem->quantity;
+                    $product->update(['stock' => $afterStock]);
+
+                    OrderItem::create([
+                        'order_id'     => $order->id,
+                        'product_id'   => $cartItem->product_id,
+                        'product_name' => $product->name,
+                        'quantity'     => $cartItem->quantity,
+                        'price'        => (float) $product->price,
+                    ]);
+
+                    InventoryLog::create([
+                        'product_id'      => $product->id,
+                        'user_id'         => $user->id,
+                        'type'            => 'sale',
+                        'quantity'        => -$cartItem->quantity,
+                        'quantity_before' => $beforeStock,
+                        'quantity_after'  => $afterStock,
+                        'reference_id'    => (string) $order->id,
+                        'notes'           => "Pending card checkout for order #{$order->id}",
+                    ]);
+                }
+
+                if ($coupon) {
+                    CouponUsage::create([
+                        'coupon_id' => $coupon->id,
+                        'user_id'   => $user->id,
+                        'order_id'  => $order->id,
+                    ]);
+                }
+
+                // Payment stays 'pending' — the webhook will mark it 'completed'
+                Payment::create([
+                    'order_id'       => $order->id,
+                    'payment_method' => 'card',
+                    'amount'         => $totalAmount,
+                    'status'         => 'pending',
                 ]);
+
+                $cart->items()->delete();
+
+                return $order;
+            });
+        } catch (\RuntimeException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        // ── 6. Build Stripe line items with strictly positive unit amounts ──
+        $targetCents = (int) round($totalAmount * 100);
+        $discountRatio = $subtotal > 0 ? ($totalAmount / $subtotal) : 1.0;
+        $lineItems = [];
+        $accumulatedCents = 0;
+        $itemsCount = $cart->items->count();
+
+        foreach ($cart->items as $index => $item) {
+            if ($index === $itemsCount - 1) {
+                $itemTotalCents = max(1, $targetCents - $accumulatedCents);
+                $unitCents = $item->quantity > 0 ? max(1, (int) round($itemTotalCents / $item->quantity)) : 1;
+            } else {
+                $discountedPrice = (float) $item->product->price * $discountRatio;
+                $unitCents = max(1, (int) round($discountedPrice * 100));
+                $accumulatedCents += ($unitCents * $item->quantity);
             }
 
-            // Payment stays 'pending' — the webhook will mark it 'completed'
-            Payment::create([
-                'order_id'       => $order->id,
-                'payment_method' => 'card',
-                'amount'         => $totalAmount,
-                'status'         => 'pending',
-                // stripe_session_id filled after Stripe session is created below
-            ]);
-
-            $cart->items()->delete();
-
-            return $order;
-        });
-
-        // ── 6. Build Stripe line items ──────────────────────────────────────
-        $lineItems = $cart->items->map(fn ($item) => [
-            'price_data' => [
-                'currency'     => 'usd',
-                'unit_amount'  => (int) round((float) $item->product->price * 100), // cents
-                'product_data' => [
-                    'name' => $item->product->name,
-                ],
-            ],
-            'quantity' => $item->quantity,
-        ])->values()->toArray();
-
-        // If a coupon discount applies, add it as a negative line item
-        if ($discountAmount > 0) {
             $lineItems[] = [
                 'price_data' => [
                     'currency'     => 'usd',
-                    'unit_amount'  => -(int) round($discountAmount * 100),
+                    'unit_amount'  => $unitCents,
                     'product_data' => [
-                        'name' => 'Coupon Discount (' . ($coupon->code ?? '') . ')',
+                        'name' => $item->product->name . ($coupon ? " (Promo {$coupon->code})" : ''),
                     ],
                 ],
-                'quantity' => 1,
+                'quantity' => $item->quantity,
             ];
         }
 
@@ -269,6 +428,39 @@ class StripeController extends Controller
     public function cancel(Request $request)
     {
         $orderId = $request->get('order_id');
+
+        if ($orderId) {
+            $order = Order::with('items')->where('id', $orderId)
+                ->where('status', 'pending')
+                ->first();
+
+            if ($order) {
+                DB::transaction(function () use ($order) {
+                    $order->update(['status' => 'cancelled']);
+                    $order->payments()->update(['status' => 'cancelled']);
+
+                    foreach ($order->items as $item) {
+                        $product = Product::where('id', $item->product_id)->lockForUpdate()->first();
+                        if ($product) {
+                            $before = (int) $product->stock;
+                            $after  = $before + $item->quantity;
+                            $product->update(['stock' => $after]);
+
+                            InventoryLog::create([
+                                'product_id'      => $product->id,
+                                'user_id'         => $order->user_id,
+                                'type'            => 'return',
+                                'quantity'        => $item->quantity,
+                                'quantity_before' => $before,
+                                'quantity_after'  => $after,
+                                'reference_id'    => (string) $order->id,
+                                'notes'           => "Stock restored due to cancelled payment for order #{$order->id}",
+                            ]);
+                        }
+                    }
+                });
+            }
+        }
 
         return view('payment.cancel', [
             'orderId' => $orderId,
