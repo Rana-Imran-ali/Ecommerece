@@ -16,6 +16,43 @@
         @stack('styles')
     </head>
     <body class="font-sans antialiased">
+        <!-- Authentication Session Bridge: Run before navbar so auth state is immediately synchronized -->
+        @auth
+            @php
+                $sessionUser = [
+                    'id' => auth()->id(),
+                    'name' => auth()->user()->name,
+                    'email' => auth()->user()->email,
+                    'role' => auth()->user()->role ?? 'customer',
+                    'avatar_url' => auth()->user()->avatar_url,
+                ];
+                $sessionToken = \Illuminate\Support\Facades\Crypt::encryptString(auth()->id() . '|' . time());
+            @endphp
+            <script>
+                window.IS_AUTHENTICATED = true;
+                window.AUTH_USER = @json($sessionUser);
+                window.SESSION_TOKEN = @json($sessionToken);
+                try {
+                    localStorage.setItem('ecommerce_auth_token', window.SESSION_TOKEN);
+                    localStorage.setItem('ecommerce_auth_user', JSON.stringify(window.AUTH_USER));
+                    sessionStorage.removeItem('logged_out');
+                } catch(e) {}
+            </script>
+        @else
+            <script>
+                window.IS_AUTHENTICATED = false;
+                window.AUTH_USER = null;
+                window.SESSION_TOKEN = null;
+                try {
+                    if (sessionStorage.getItem('logged_out')) {
+                        localStorage.removeItem('ecommerce_auth_token');
+                        localStorage.removeItem('ecommerce_auth_user');
+                        sessionStorage.removeItem('logged_out');
+                    }
+                } catch(e) {}
+            </script>
+        @endauth
+
         <div class="min-h-screen bg-gray-100">
             @include('layouts.navbar')
 
@@ -34,37 +71,6 @@
                 @yield('content')
             </main>
         </div>
-
-        <!-- Authentication Session Bridge -->
-        @auth
-            @php
-                $sessionUser = [
-                    'id' => auth()->id(),
-                    'name' => auth()->user()->name,
-                    'email' => auth()->user()->email,
-                    'role' => auth()->user()->role ?? 'customer',
-                ];
-                $sessionToken = \Illuminate\Support\Facades\Crypt::encryptString(auth()->id() . '|' . time());
-            @endphp
-            <script>
-                (function() {
-                    const token = @json($sessionToken);
-                    const user = @json($sessionUser);
-                    localStorage.setItem('ecommerce_auth_token', token);
-                    localStorage.setItem('ecommerce_auth_user', JSON.stringify(user));
-                })();
-            </script>
-        @else
-            <script>
-                (function() {
-                    if (sessionStorage.getItem('logged_out')) {
-                        localStorage.removeItem('ecommerce_auth_token');
-                        localStorage.removeItem('ecommerce_auth_user');
-                        sessionStorage.removeItem('logged_out');
-                    }
-                })();
-            </script>
-        @endauth
 
         <!-- Global API Helper & Stack Scripts -->
         <script src="{{ asset('js/api.js') }}"></script>

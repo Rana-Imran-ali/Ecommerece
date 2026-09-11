@@ -65,28 +65,39 @@ Route::post('/contact', function (Request $request) {
 Route::view('/cart', 'cart.index')->name('cart.index');
 Route::view('/checkout', 'checkout.index')->name('checkout.index');
 
-// Orders History & Details
-Route::view('/orders', 'orders.index')->name('orders.index');
-Route::get('/orders/{id}', function ($id) {
-    return view('orders.show', ['orderId' => $id]);
-})->name('orders.show');
 
-// Wishlist
-Route::view('/wishlist', 'wishlist.index')->name('wishlist.index');
-
-// Addresses
-Route::view('/addresses', 'addresses.index')->name('addresses.index');
-
-// Dashboard redirect bridge (redirects admin to admin dashboard, customer to home)
+// Dashboard redirect bridge (redirects admin to admin dashboard, customer to My Account)
 Route::get('/dashboard', function () {
     if (auth()->user()?->isAdmin()) {
         return redirect()->route('admin.dashboard');
     }
-    return redirect()->route('home');
+    return redirect()->route('account.index');
 })->middleware(['auth'])->name('dashboard');
 
-// Profile & Security
-Route::view('/profile', 'profile.index')->name('profile.edit');
+/*
+|--------------------------------------------------------------------------
+| Customer Account Routes (requires authentication)
+|--------------------------------------------------------------------------
+*/
+Route::middleware(['auth'])->group(function () {
+    // Unified My Account hub
+    Route::view('/account', 'account.index')->name('account.index');
+
+    // Profile & Security
+    Route::view('/profile', 'profile.index')->name('profile.edit');
+
+    // Orders History & Details
+    Route::view('/orders', 'orders.index')->name('orders.index');
+    Route::get('/orders/{id}', function ($id) {
+        return view('orders.show', ['orderId' => $id]);
+    })->name('orders.show');
+
+    // Wishlist
+    Route::view('/wishlist', 'wishlist.index')->name('wishlist.index');
+
+    // Addresses
+    Route::view('/addresses', 'addresses.index')->name('addresses.index');
+});
 
 /*
 |--------------------------------------------------------------------------
@@ -129,6 +140,8 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'admin'])->group(fun
     Route::get('orders', [AdminOrderController::class, 'index'])->name('orders.index');
     Route::get('orders/{order}', [AdminOrderController::class, 'show'])->name('orders.show');
     Route::patch('orders/{order}/status', [AdminOrderController::class, 'updateStatus'])->name('orders.status');
+    Route::post('orders/{order}/notify/approval', [AdminOrderController::class, 'sendApprovalEmail'])->name('orders.notify.approval');
+    Route::post('orders/{order}/notify/delivery-date', [AdminOrderController::class, 'sendDeliveryDateEmail'])->name('orders.notify.delivery-date');
 
     // Users & Customers
     Route::get('users', [AdminUserController::class, 'index'])->name('users.index');

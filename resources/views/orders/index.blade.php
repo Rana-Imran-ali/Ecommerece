@@ -68,13 +68,27 @@
             const statusColors = {
                 pending: 'bg-yellow-100 text-yellow-800 border-yellow-200',
                 processing: 'bg-blue-100 text-blue-800 border-blue-200',
+                out_for_delivery: 'bg-purple-100 text-purple-800 border-purple-200',
                 shipped: 'bg-indigo-100 text-indigo-800 border-indigo-200',
                 delivered: 'bg-emerald-100 text-emerald-800 border-emerald-200',
                 completed: 'bg-green-100 text-green-800 border-green-200',
                 cancelled: 'bg-red-100 text-red-800 border-red-200',
             };
+            const statusLabels = {
+                pending: 'Pending',
+                processing: 'Confirmed / Processing',
+                out_for_delivery: 'Out for Delivery',
+                shipped: 'Out for Delivery',
+                delivered: 'Delivered',
+                completed: 'Completed',
+                cancelled: 'Cancelled',
+            };
             const badgeClass = statusColors[order.status] || 'bg-gray-100 text-gray-800 border-gray-200';
+            const displayStatus = statusLabels[order.status] || order.status;
             const dateStr = new Date(order.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+            const expectedDeliveryStr = order.expected_delivery_date
+                ? new Date(order.expected_delivery_date).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+                : null;
 
             return `
                 <div class="bg-white rounded-lg border border-gray-200 p-5 sm:p-6 space-y-4 hover:border-gray-300 transition-colors">
@@ -82,7 +96,7 @@
                         <div class="flex items-center space-x-3">
                             <span class="font-bold text-gray-900 text-base">Order #${order.id}</span>
                             <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold border uppercase tracking-wider ${badgeClass}">
-                                ${order.status}
+                                ${displayStatus}
                             </span>
                         </div>
                         <div class="text-xs text-gray-500">
@@ -95,6 +109,7 @@
                         <div class="space-y-1 text-sm text-gray-600">
                             <p class="font-medium text-gray-800">${order.items?.length || 0} product(s) ordered</p>
                             <p class="text-xs text-gray-400">Delivered to: ${order.address?.city || 'Address'}</p>
+                            ${expectedDeliveryStr ? `<p class="text-xs font-semibold text-indigo-600 flex items-center gap-1"><span>🚚 Expected: ${expectedDeliveryStr}</span></p>` : ''}
                         </div>
                         <div class="text-right">
                             <span class="text-xs text-gray-400 block">Total Amount</span>

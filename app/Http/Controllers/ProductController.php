@@ -186,30 +186,17 @@ class ProductController extends Controller
     }
 
     /**
-     * Remove the specified product and clean up all associated physical image files.
+     * Remove the specified product (soft-delete, preserving images for order history).
      */
     public function destroy(Product $product): JsonResponse
     {
-        DB::transaction(function () use ($product) {
-            // Delete physical image files from disk
-            foreach ($product->images as $productImage) {
-                if ($productImage->image && Storage::disk('public')->exists($productImage->image)) {
-                    Storage::disk('public')->delete($productImage->image);
-                }
-            }
-
-            // Delete product images records
-            $product->images()->delete();
-
-            // Soft-delete product
-            $product->delete();
-        });
+        $product->delete();
 
         Cache::forget('categories.all');
 
         return response()->json([
             'success' => true,
-            'message' => 'Product and associated images deleted successfully.',
+            'message' => 'Product deleted successfully.',
         ], Response::HTTP_OK);
     }
 

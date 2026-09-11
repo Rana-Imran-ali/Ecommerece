@@ -131,7 +131,7 @@
                 <tr>
                     <td>
                         @if($product->primaryImage)
-                            <img src="{{ asset('storage/'.$product->primaryImage->image_url) }}" class="img-thumb" alt="">
+                            <img src="{{ asset('storage/'.ltrim($product->primaryImage->image, '/')) }}" class="img-thumb" alt="">
                         @else
                             <div class="img-thumb" style="background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:20px">📦</div>
                         @endif

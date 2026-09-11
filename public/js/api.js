@@ -26,17 +26,16 @@ const CACHE_TTL = {
 
 // Get stored token
 function getAuthToken() {
-    return localStorage.getItem(API_TOKEN_KEY);
+    return localStorage.getItem(API_TOKEN_KEY) || (typeof window !== 'undefined' ? window.SESSION_TOKEN : null);
 }
 
 // Get stored user info
 function getAuthUser() {
     try {
         const user = localStorage.getItem(API_USER_KEY);
-        return user ? JSON.parse(user) : null;
-    } catch (e) {
-        return null;
-    }
+        if (user) return JSON.parse(user);
+    } catch (e) {}
+    return (typeof window !== 'undefined' && window.AUTH_USER) ? window.AUTH_USER : null;
 }
 
 // Store auth token & user data
@@ -287,19 +286,32 @@ function updateBadge(id, count) {
  * Update UI for authenticated vs guest user in the Navbar
  */
 function updateNavAuthUI() {
-    const user = getAuthUser();
+    const isServerAuth = typeof window !== 'undefined' && window.IS_AUTHENTICATED === true;
     const token = getAuthToken();
+    const user = getAuthUser();
+
+    const isAuth = isServerAuth || !!(token && user);
 
     const guestElements = document.querySelectorAll('.nav-guest-only');
     const authElements = document.querySelectorAll('.nav-auth-only');
     const userNameElements = document.querySelectorAll('.nav-user-name');
     const userInitialElements = document.querySelectorAll('.nav-user-initial');
+    const userAvatarElements = document.querySelectorAll('.nav-user-avatar');
 
-    if (token && user) {
+    if (isAuth) {
         guestElements.forEach(el => el.classList.add('hidden'));
         authElements.forEach(el => el.classList.remove('hidden'));
-        userNameElements.forEach(el => el.textContent = user.name || 'User');
-        userInitialElements.forEach(el => el.textContent = (user.name || 'U').charAt(0).toUpperCase());
+        if (user) {
+            userNameElements.forEach(el => el.textContent = user.name || 'Customer');
+            userInitialElements.forEach(el => el.textContent = (user.name || 'U').charAt(0).toUpperCase());
+            const avatarUrl = user.avatar_url || ('https://ui-avatars.com/api/?name=' + encodeURIComponent(user.name || 'U') + '&background=6366f1&color=ffffff&size=64&rounded=true&bold=true');
+            userAvatarElements.forEach(el => {
+                if (el.tagName === 'IMG') {
+                    el.src = avatarUrl;
+                    el.alt = user.name || 'User';
+                }
+            });
+        }
     } else {
         guestElements.forEach(el => el.classList.remove('hidden'));
         authElements.forEach(el => el.classList.add('hidden'));

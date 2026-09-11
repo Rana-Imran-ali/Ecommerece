@@ -40,8 +40,9 @@ class StripeController extends Controller
         $user = $request->user();
 
         $validated = $request->validate([
-            'address_id'  => ['required', 'integer', 'exists:addresses,id'],
-            'coupon_code' => ['nullable', 'string'],
+            'address_id'     => ['required', 'integer', 'exists:addresses,id'],
+            'customer_email' => ['nullable', 'email', 'max:255'],
+            'coupon_code'    => ['nullable', 'string'],
         ]);
 
         // Validate address ownership
@@ -158,8 +159,9 @@ class StripeController extends Controller
 
 
         $validated = $request->validate([
-            'address_id'   => ['required', 'integer', 'exists:addresses,id'],
-            'coupon_code'  => ['nullable', 'string'],
+            'address_id'     => ['required', 'integer', 'exists:addresses,id'],
+            'customer_email' => ['nullable', 'email', 'max:255'],
+            'coupon_code'    => ['nullable', 'string'],
         ]);
 
         // ── 1. Validate address ownership ──────────────────────────────────
@@ -252,11 +254,16 @@ class StripeController extends Controller
         try {
             $order = DB::transaction(function () use ($user, $address, $cart, $totalAmount, $validated, $coupon) {
 
+                $customerEmail = !empty($validated['customer_email']) ? trim($validated['customer_email']) : $user->email;
+                $expectedDeliveryDate = now()->addDays(4)->toDateString();
+
                 $order = Order::create([
-                    'user_id'      => $user->id,
-                    'address_id'   => $address->id,
-                    'status'       => 'pending',
-                    'total_amount' => $totalAmount,
+                    'user_id'                => $user->id,
+                    'customer_email'         => $customerEmail,
+                    'address_id'             => $address->id,
+                    'status'                 => 'pending',
+                    'expected_delivery_date' => $expectedDeliveryDate,
+                    'total_amount'           => $totalAmount,
                 ]);
 
                 foreach ($cart->items as $cartItem) {
@@ -430,7 +437,16 @@ class StripeController extends Controller
         $orderId = $request->get('order_id');
 
         if ($orderId) {
-            $order = Order::with('items')->where('id', $orderId)
+            // Require authentication and verify order ownership to prevent unauthorized cancellations
+            $userId = auth()->id();
+
+            if (!$userId) {
+                return redirect()->route('login');
+            }
+
+            $order = Order::with('items')
+                ->where('id', $orderId)
+                ->where('user_id', $userId)
                 ->where('status', 'pending')
                 ->first();
 
@@ -546,15 +562,32 @@ class StripeController extends Controller
         if ($payment && $payment->status === 'pending') {
             DB::transaction(function () use ($payment) {
                 $payment->update(['status' => 'failed']);
-                $payment->order()->update(['status' => 'cancelled']);
+                $order = $payment->order;
+                $order->update(['status' => 'cancelled']);
 
-                // Restore stock
-                foreach ($payment->order->items as $item) {
-                    Product::where('id', $item->product_id)->increment('stock', $item->quantity);
+                // Restore stock and record inventory logs
+                foreach ($order->items as $item) {
+                    $product = Product::where('id', $item->product_id)->lockForUpdate()->first();
+                    if ($product) {
+                        $before = (int) $product->stock;
+                        $after  = $before + $item->quantity;
+                        $product->update(['stock' => $after]);
+
+                        InventoryLog::create([
+                            'product_id'      => $product->id,
+                            'user_id'         => $order->user_id,
+                            'type'            => 'return',
+                            'quantity'        => $item->quantity,
+                            'quantity_before' => $before,
+                            'quantity_after'  => $after,
+                            'reference_id'    => (string) $order->id,
+                            'notes'           => "Stock restored: Stripe checkout session expired for order #{$order->id}",
+                        ]);
+                    }
                 }
             });
 
-            Log::info('Stripe webhook: session expired, order cancelled', ['order_id' => $payment->order_id]);
+            Log::info('Stripe webhook: session expired, order cancelled and stock restored', ['order_id' => $payment->order_id]);
         }
     }
 
@@ -566,10 +599,34 @@ class StripeController extends Controller
         $payment = Payment::where('stripe_payment_intent_id', $paymentIntent->id)->first();
 
         if ($payment && $payment->status === 'pending') {
-            $payment->update(['status' => 'failed']);
-            $payment->order()->update(['status' => 'cancelled']);
+            DB::transaction(function () use ($payment) {
+                $payment->update(['status' => 'failed']);
+                $order = $payment->order;
+                $order->update(['status' => 'cancelled']);
 
-            Log::info('Stripe webhook: payment failed', ['order_id' => $payment->order_id]);
+                // Restore stock and record inventory logs
+                foreach ($order->items as $item) {
+                    $product = Product::where('id', $item->product_id)->lockForUpdate()->first();
+                    if ($product) {
+                        $before = (int) $product->stock;
+                        $after  = $before + $item->quantity;
+                        $product->update(['stock' => $after]);
+
+                        InventoryLog::create([
+                            'product_id'      => $product->id,
+                            'user_id'         => $order->user_id,
+                            'type'            => 'return',
+                            'quantity'        => $item->quantity,
+                            'quantity_before' => $before,
+                            'quantity_after'  => $after,
+                            'reference_id'    => (string) $order->id,
+                            'notes'           => "Stock restored: Stripe payment failed for order #{$order->id}",
+                        ]);
+                    }
+                }
+            });
+
+            Log::info('Stripe webhook: payment failed, order cancelled and stock restored', ['order_id' => $payment->order_id]);
         }
     }
 }

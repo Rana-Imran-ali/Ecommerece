@@ -324,6 +324,12 @@
             return;
         }
 
+        if (!getAuthToken()) {
+            showAlert('details-alert', 'Please log in to add items to your shopping cart.', 'warning');
+            setTimeout(() => window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname), 1200);
+            return;
+        }
+
         const btn = document.getElementById('btn-add-detail');
         if (btn) {
             btn.disabled = true;

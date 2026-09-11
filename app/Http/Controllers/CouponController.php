@@ -48,8 +48,22 @@ class CouponController extends Controller
             ], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
-        // Check if user already used this coupon (if authenticated)
+        // Check if user already used this coupon (via session or bearer token)
         $user = $request->user();
+        if (!$user && $token = $request->bearerToken()) {
+            try {
+                if (!\Illuminate\Support\Facades\Cache::has('token_blacklist_' . sha1($token))) {
+                    $decrypted = \Illuminate\Support\Facades\Crypt::decryptString($token);
+                    $parts = explode('|', $decrypted);
+                    if (count($parts) >= 2 && (time() - (int) $parts[1] <= 30 * 86400)) {
+                        $user = \App\Models\User::find((int) $parts[0]);
+                    }
+                }
+            } catch (\Throwable $e) {
+                // Ignore invalid token on public endpoint
+            }
+        }
+
         if ($user) {
             $alreadyUsed = \App\Models\CouponUsage::where('coupon_id', $coupon->id)
                 ->where('user_id', $user->id)

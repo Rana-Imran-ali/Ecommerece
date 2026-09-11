@@ -25,7 +25,22 @@ class User extends Authenticatable
         'email',
         'password',
         'role',
+        'avatar',
     ];
+
+    /**
+     * Get the full public URL for the user's avatar,
+     * falling back to a generated initial-based placeholder.
+     */
+    public function getAvatarUrlAttribute(): string
+    {
+        if ($this->avatar) {
+            return asset('storage/' . $this->avatar);
+        }
+
+        // Generate a placeholder via UI Avatars
+        return 'https://ui-avatars.com/api/?name=' . urlencode($this->name) . '&background=6366f1&color=ffffff&size=128&rounded=true&bold=true';
+    }
 
     /**
      * Determine if the user is an administrator.

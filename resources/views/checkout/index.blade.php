@@ -83,6 +83,7 @@
         const subtotal   = parseFloat(checkoutCart.subtotal || 0);
         const discount   = appliedCoupon ? parseFloat(appliedCoupon.discount_amount || 0) : 0;
         const finalTotal = Math.max(0, subtotal - discount).toFixed(2);
+        const userEmail  = (getAuthUser()?.email || '').trim();
 
         const container = document.getElementById('checkout-content');
 
@@ -123,9 +124,35 @@
                     `}
                 </div>
 
-                <!-- 2. Payment Method -->
+                <!-- 2. Order Notification Email -->
+                <div class="bg-white p-6 rounded-lg border border-gray-200 space-y-3">
+                    <div class="flex items-center justify-between border-b border-gray-100 pb-3">
+                        <h2 class="text-base font-bold text-gray-900">2. Order Notification Email</h2>
+                        <span class="text-xs text-indigo-600 font-medium flex items-center gap-1">
+                            <span>📧</span> Automated Updates
+                        </span>
+                    </div>
+                    <p class="text-xs text-gray-500 leading-relaxed">
+                        We will automatically send real-time order tracking updates (<strong>Pending, Confirmed/Processing, Out for Delivery, and Delivered</strong>) including the <strong>expected delivery date</strong> to this email address.
+                    </p>
+                    <div>
+                        <label for="customer-email" class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
+                            Recipient Email Address <span class="text-red-500">*</span>
+                        </label>
+                        <input type="email"
+                               id="customer-email"
+                               name="customer_email"
+                               value="${userEmail}"
+                               required
+                               placeholder="your.email@example.com"
+                               class="w-full px-3.5 py-2.5 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors">
+                        <p class="text-[11px] text-gray-400 mt-1">Pre-filled with your account email. You may change it to receive notifications at an alternate address.</p>
+                    </div>
+                </div>
+
+                <!-- 3. Payment Method -->
                 <div class="bg-white p-6 rounded-lg border border-gray-200 space-y-4">
-                    <h2 class="text-base font-bold text-gray-900 border-b border-gray-100 pb-3">2. Payment Method</h2>
+                    <h2 class="text-base font-bold text-gray-900 border-b border-gray-100 pb-3">3. Payment Method</h2>
                     <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <label id="pm-label-cod"
                                class="flex items-center p-3 border-2 border-indigo-600 bg-indigo-50/20 rounded-lg cursor-pointer transition-all">
@@ -421,6 +448,13 @@
             return;
         }
 
+        const emailInput = document.getElementById('customer-email');
+        const customerEmail = emailInput?.value?.trim() || getAuthUser()?.email;
+        if (!customerEmail || !customerEmail.includes('@')) {
+            showAlert('checkout-alert', 'Please provide a valid order notification email address.', 'danger');
+            return;
+        }
+
         const paymentMethod = getSelectedPaymentMethod();
         const btn           = document.getElementById('place-order-btn');
 
@@ -429,11 +463,11 @@
 
         try {
             if (paymentMethod === 'card') {
-                await handleCardCheckout(addrInput, btn);
+                await handleCardCheckout(addrInput, btn, customerEmail);
             } else if (paymentMethod === 'bank_transfer') {
-                await handleBankTransferCheckout(addrInput, btn);
+                await handleBankTransferCheckout(addrInput, btn, customerEmail);
             } else {
-                await handleCodCheckout(addrInput, btn);
+                await handleCodCheckout(addrInput, btn, customerEmail);
             }
         } catch (err) {
             btn.disabled    = false;
@@ -443,7 +477,7 @@
     }
 
     // ── Card Checkout ──────────────────────────────────────────────────────
-    async function handleCardCheckout(addrInput, btn) {
+    async function handleCardCheckout(addrInput, btn, customerEmail) {
         if (!stripeInstance || !cardElement) {
             throw new Error('Payment system unavailable. Please refresh and try again.');
         }
@@ -463,8 +497,9 @@
             const intentRes = await apiFetch('/api/stripe/payment-intent', {
                 method: 'POST',
                 body:   JSON.stringify({
-                    address_id:  parseInt(addrInput.value),
-                    coupon_code: appliedCoupon ? appliedCoupon.code : null,
+                    address_id:     parseInt(addrInput.value),
+                    coupon_code:    appliedCoupon ? appliedCoupon.code : null,
+                    customer_email: customerEmail,
                 })
             });
 
@@ -485,7 +520,7 @@
             {
                 payment_method: {
                     card:            cardElement,
-                    billing_details: { name: cardholderName }
+                    billing_details: { name: cardholderName, email: customerEmail }
                 }
             }
         );
@@ -515,6 +550,7 @@
             method: 'POST',
             body:   JSON.stringify({
                 address_id:              parseInt(addrInput.value),
+                customer_email:          customerEmail,
                 payment_method:          'card',
                 coupon_code:             appliedCoupon ? appliedCoupon.code : null,
                 stripe_payment_intent_id: paymentIntent.id,
@@ -534,7 +570,7 @@
     }
 
     // ── Bank Transfer Checkout ─────────────────────────────────────────────
-    async function handleBankTransferCheckout(addrInput, btn) {
+    async function handleBankTransferCheckout(addrInput, btn, customerEmail) {
         const senderBank = document.getElementById('sender-bank')?.value?.trim();
         const senderName = document.getElementById('sender-name')?.value?.trim();
         const txRef      = document.getElementById('transaction-reference')?.value?.trim();
@@ -550,6 +586,7 @@
             method: 'POST',
             body:   JSON.stringify({
                 address_id:           parseInt(addrInput.value),
+                customer_email:       customerEmail,
                 payment_method:       'bank_transfer',
                 coupon_code:          appliedCoupon ? appliedCoupon.code : null,
                 sender_bank:          senderBank,
@@ -571,11 +608,12 @@
     }
 
     // ── COD Checkout ──────────────────────────────────────────────────────
-    async function handleCodCheckout(addrInput, btn) {
+    async function handleCodCheckout(addrInput, btn, customerEmail) {
         const res = await apiFetch('/api/orders', {
             method: 'POST',
             body:   JSON.stringify({
                 address_id:     parseInt(addrInput.value),
+                customer_email: customerEmail,
                 payment_method: 'cod',
                 coupon_code:    appliedCoupon ? appliedCoupon.code : null,
             })

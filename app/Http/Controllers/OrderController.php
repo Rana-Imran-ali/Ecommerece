@@ -76,6 +76,7 @@ class OrderController extends Controller
         // ── 1. Shared base validation ─────────────────────────────────────────
         $baseRules = [
             'address_id'     => ['required', 'integer', 'exists:addresses,id'],
+            'customer_email' => ['nullable', 'email', 'max:255'],
             'payment_method' => ['required', 'string', 'in:cod,bank_transfer,card'],
             'coupon_code'    => ['nullable', 'string'],
         ];
@@ -257,11 +258,16 @@ class OrderController extends Controller
                     $user, $address, $cart, $totalAmount, $validated, $coupon,
                     $paymentMethod, $stripePaymentIntentId, $transactionReference, $paymentDetails
                 ) {
+                    $customerEmail = !empty($validated['customer_email']) ? trim($validated['customer_email']) : $user->email;
+                    $expectedDeliveryDate = now()->addDays(4)->toDateString();
+
                     $order = Order::create([
-                        'user_id'      => $user->id,
-                        'address_id'   => $address->id,
-                        'status'       => 'pending',
-                        'total_amount' => $totalAmount,
+                        'user_id'                => $user->id,
+                        'customer_email'         => $customerEmail,
+                        'address_id'             => $address->id,
+                        'status'                 => 'pending',
+                        'expected_delivery_date' => $expectedDeliveryDate,
+                        'total_amount'           => $totalAmount,
                     ]);
 
                     foreach ($cart->items as $cartItem) {

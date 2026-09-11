@@ -58,12 +58,26 @@
         const statusColors = {
             pending: 'bg-yellow-100 text-yellow-800 border-yellow-200',
             processing: 'bg-blue-100 text-blue-800 border-blue-200',
+            out_for_delivery: 'bg-purple-100 text-purple-800 border-purple-200',
             shipped: 'bg-indigo-100 text-indigo-800 border-indigo-200',
             delivered: 'bg-emerald-100 text-emerald-800 border-emerald-200',
             completed: 'bg-green-100 text-green-800 border-green-200',
             cancelled: 'bg-red-100 text-red-800 border-red-200',
         };
+        const statusLabels = {
+            pending: 'Pending',
+            processing: 'Confirmed / Processing',
+            out_for_delivery: 'Out for Delivery',
+            shipped: 'Out for Delivery',
+            delivered: 'Delivered',
+            completed: 'Completed',
+            cancelled: 'Cancelled',
+        };
         const badgeClass = statusColors[order.status] || 'bg-gray-100 text-gray-800 border-gray-200';
+        const displayStatus = statusLabels[order.status] || order.status;
+        const formattedDeliveryDate = order.expected_delivery_date
+            ? new Date(order.expected_delivery_date).toLocaleDateString(undefined, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })
+            : null;
 
         container.innerHTML = `
             <!-- Receipt Header -->
@@ -72,10 +86,16 @@
                     <div class="flex items-center space-x-3">
                         <h1 class="text-2xl font-bold text-gray-900">Order #${order.id}</h1>
                         <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold border uppercase tracking-wider ${badgeClass}">
-                            ${order.status}
+                            ${displayStatus}
                         </span>
                     </div>
                     <p class="text-xs text-gray-500 mt-1">Placed on ${new Date(order.created_at).toLocaleString()}</p>
+                    ${order.customer_email ? `
+                        <p class="text-xs text-indigo-600 mt-0.5 flex items-center gap-1 font-medium">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                            Notifications sent to: <span class="font-semibold">${order.customer_email}</span>
+                        </p>
+                    ` : ''}
                 </div>
 
                 ${order.status === 'pending' ? `
@@ -86,6 +106,24 @@
                 ` : ''}
             </div>
 
+            <!-- Expected Delivery Date Banner (if applicable) -->
+            ${formattedDeliveryDate ? `
+                <div class="p-4 bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-100 rounded-xl flex items-center justify-between">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-9 h-9 rounded-lg bg-indigo-600 text-white flex items-center justify-center flex-shrink-0 shadow-sm">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                        </div>
+                        <div>
+                            <div class="text-xs font-semibold uppercase tracking-wider text-indigo-700">Expected Delivery</div>
+                            <div class="text-base font-bold text-gray-900">${formattedDeliveryDate}</div>
+                        </div>
+                    </div>
+                    <span class="inline-flex items-center text-xs font-medium text-indigo-700 bg-white px-2.5 py-1 rounded-full border border-indigo-200">
+                        Status: ${displayStatus}
+                    </span>
+                </div>
+            ` : ''}
+
             <!-- Shipping & Payment Information Cards -->
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                 <div class="p-4 bg-gray-50 rounded-lg border border-gray-100 space-y-1">
@@ -95,6 +133,7 @@
                     <p class="text-gray-600">${addr.city || ''}, ${addr.state || ''} ${addr.postal_code || ''}</p>
                     <p class="text-gray-600">${addr.country || ''}</p>
                     <p class="text-xs text-gray-400 mt-1">Phone: ${addr.phone || 'N/A'}</p>
+                    ${order.customer_email ? `<p class="text-xs text-indigo-600 font-medium pt-1">Email: ${order.customer_email}</p>` : ''}
                 </div>
 
                 <div class="p-4 bg-gray-50 rounded-lg border border-gray-100 space-y-1">
