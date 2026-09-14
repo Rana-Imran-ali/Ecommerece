@@ -75,5 +75,8 @@
         <!-- Global API Helper & Stack Scripts -->
         <script src="{{ asset('js/api.js') }}"></script>
         @stack('scripts')
+
+        <!-- WhatsApp Floating Chat Button -->
+        @include('components.whatsapp-button')
     </body>
 </html>

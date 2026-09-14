@@ -55,9 +55,21 @@
                 <div>
                     <h3 class="text-base font-bold text-gray-900">Phone & WhatsApp</h3>
                     <p class="text-xs text-gray-500 mt-1">Mon – Fri from 9am to 6pm EST.</p>
-                    <a href="tel:+18005550199" class="text-sm font-semibold text-emerald-600 hover:underline mt-2 inline-block">
-                        +1 (800) 555-0199
-                    </a>
+                    <div class="flex items-center space-x-3 mt-2">
+                        <a href="tel:+18005550199" class="text-sm font-semibold text-emerald-600 hover:underline">
+                            +1 (800) 555-0199
+                        </a>
+                        <span class="text-gray-300">|</span>
+                        <a href="https://wa.me/{{ preg_replace('/[^0-9]/', '', config('whatsapp.support_phone', '18005550199')) }}?text={{ rawurlencode('Hello! I have a question regarding your store.') }}"
+                           target="_blank"
+                           rel="noopener noreferrer"
+                           class="inline-flex items-center space-x-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 px-2.5 py-1 rounded-md transition-colors shadow-2xs">
+                            <svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                                <path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.77-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.312.045-.694.072-2.193-.55-1.915-.795-3.14-2.753-3.235-2.88-.095-.127-.778-1.034-.778-1.97 0-.936.491-1.396.666-1.587.175-.19.381-.238.508-.238.127 0 .254.001.365.006.118.005.276-.045.431.328.16.386.545 1.332.593 1.43.048.098.08.213.016.341-.064.127-.096.206-.191.318-.095.111-.2.249-.286.334-.095.095-.194.198-.083.389.111.19.493.813 1.058 1.317.728.649 1.341.85 1.531.945.19.095.302.079.413-.048.111-.127.476-.556.603-.746.127-.19.254-.159.429-.095.175.063 1.111.524 1.302.619.19.095.317.143.365.222.048.079.048.46-.096.865z"/>
+                            </svg>
+                            <span>Chat Now</span>
+                        </a>
+                    </div>
                 </div>
             </div>
 

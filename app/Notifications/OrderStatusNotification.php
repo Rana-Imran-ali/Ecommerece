@@ -3,13 +3,11 @@
 namespace App\Notifications;
 
 use App\Models\Order;
-use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
 class OrderStatusNotification extends Notification
 {
-    use Queueable;
 
     public Order $order;
 

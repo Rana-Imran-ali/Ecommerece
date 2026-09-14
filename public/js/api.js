@@ -102,6 +102,8 @@ async function apiFetch(endpoint, options = {}) {
         if (url.includes('/cart')) {
             sessionStorage.removeItem(NAV_COUNTS_KEY);
             clearClientCache('/cart');
+            // Notify cart dropdown to reload on next open
+            document.dispatchEvent(new CustomEvent('cart:updated'));
         } else if (url.includes('/wishlist')) {
             sessionStorage.removeItem(NAV_COUNTS_KEY);
             clearClientCache('/wishlist');

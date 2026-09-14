@@ -9,6 +9,7 @@ use App\Http\Controllers\OrderController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ReviewController;
 use App\Http\Controllers\StripeController;
+use App\Http\Controllers\WhatsAppWebhookController;
 use App\Http\Controllers\WishlistController;
 use App\Http\Middleware\ApiAuthMiddleware;
 use Illuminate\Support\Facades\Route;
@@ -46,6 +47,12 @@ Route::prefix('categories')->group(function () {
 Route::prefix('coupons')->group(function () {
     Route::get('/', [CouponController::class, 'index'])->name('api.coupons.index');
     Route::post('/validate', [CouponController::class, 'validateCoupon'])->name('api.coupons.validate');
+});
+
+// WhatsApp Webhook (Public)
+Route::prefix('whatsapp')->group(function () {
+    Route::get('/webhook', [WhatsAppWebhookController::class, 'verify'])->name('api.whatsapp.verify');
+    Route::post('/webhook', [WhatsAppWebhookController::class, 'handleWebhook'])->name('api.whatsapp.webhook');
 });
 
 /*
