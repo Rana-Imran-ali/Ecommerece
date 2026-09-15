@@ -90,8 +90,8 @@ Route::middleware(ApiAuthMiddleware::class)->group(function () {
     // Auth Profile & Security
     Route::post('/logout', [AuthController::class, 'logout'])->name('api.logout');
     Route::get('/user', [AuthController::class, 'me'])->name('api.user');
-    // POST used (not PUT) so multipart/form-data avatar uploads are supported
-    Route::post('/profile', [AuthController::class, 'updateProfile'])->name('api.profile.update');
+    // Accepts POST (for multipart/form-data avatar uploads) and PUT (for JSON profile updates)
+    Route::match(['post', 'put'], '/profile', [AuthController::class, 'updateProfile'])->name('api.profile.update');
     Route::put('/password', [AuthController::class, 'updatePassword'])->name('api.password.update');
     Route::delete('/account', [AuthController::class, 'deleteAccount'])->name('api.account.delete');
 

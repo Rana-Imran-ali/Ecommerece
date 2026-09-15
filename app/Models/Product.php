@@ -19,6 +19,26 @@ class Product extends Model
     ];
 
     /**
+     * The "booted" method of the model.
+     */
+    protected static function booted(): void
+    {
+        static::created(function (Product $product) {
+            if ($product->stock > 0) {
+                InventoryLog::create([
+                    'product_id'      => $product->id,
+                    'user_id'         => auth()->id(),
+                    'type'            => 'stock_in',
+                    'quantity'        => (int) $product->stock,
+                    'quantity_before' => 0,
+                    'quantity_after'  => (int) $product->stock,
+                    'notes'           => 'Initial stock on product creation',
+                ]);
+            }
+        });
+    }
+
+    /**
      * Get the category that owns the product.
      */
     public function category(): \Illuminate\Database\Eloquent\Relations\BelongsTo

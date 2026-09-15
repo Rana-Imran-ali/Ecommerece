@@ -54,7 +54,6 @@ class ReviewController extends Controller
             [
                 'rating' => $validated['rating'],
                 'comment' => $validated['comment'] ?? null,
-                'status' => 'pending',
             ]
         );
 
@@ -62,7 +61,7 @@ class ReviewController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Review submitted successfully and will appear once approved by a moderator.',
+            'message' => 'Review submitted successfully.',
             'data' => $review,
         ], Response::HTTP_CREATED);
     }

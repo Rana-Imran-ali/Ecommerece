@@ -196,9 +196,14 @@ class OrderController extends Controller
         $discountAmount = 0.0;
 
         if (!empty($validated['coupon_code'])) {
-            $coupon = Coupon::where('code', trim($validated['coupon_code']))
-                ->where('is_active', true)
-                ->first();
+            $coupon = Coupon::where('code', trim($validated['coupon_code']))->first();
+
+            if ($coupon && ($error = $coupon->globalValidationError())) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $error,
+                ], Response::HTTP_UNPROCESSABLE_ENTITY);
+            }
 
             if (!$coupon) {
                 return response()->json([
@@ -225,13 +230,11 @@ class OrderController extends Controller
                 ], Response::HTTP_UNPROCESSABLE_ENTITY);
             }
 
-            $discountAmount = ($subtotal * (float) $coupon->discount_percent) / 100;
-            if ($coupon->max_discount && $discountAmount > (float) $coupon->max_discount) {
-                $discountAmount = (float) $coupon->max_discount;
-            }
+            // Supports 'percent' and 'fixed', always capped at subtotal
+            $discountAmount = $coupon->calculateDiscount($subtotal);
         }
 
-        $totalAmount = max(0, round($subtotal - $discountAmount, 2));
+        $totalAmount = round($subtotal - $discountAmount, 2);
 
         // ── 8. Card payment: verify amount consistency ────────────────────────
         if ($paymentMethod === 'card' && isset($intent)) {

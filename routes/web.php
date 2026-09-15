@@ -61,10 +61,12 @@ Route::post('/contact', function (Request $request) {
     return back()->with('success', 'Thank you for reaching out! Your message has been received and our team will get back to you shortly.');
 })->middleware('throttle:15,1')->name('contact.submit');
 
-// Shopping Cart & Checkout Flow
+// Shopping Cart, Wishlist, Addresses, Profile & Checkout (Client-Side Token / Hybrid Views)
 Route::view('/cart', 'cart.index')->name('cart.index');
 Route::view('/checkout', 'checkout.index')->name('checkout.index');
-
+Route::view('/wishlist', 'wishlist.index')->name('wishlist.index');
+Route::view('/addresses', 'addresses.index')->name('addresses.index');
+Route::view('/profile', 'profile.index')->name('profile.edit');
 
 // Dashboard redirect bridge (redirects admin to admin dashboard, customer to My Account)
 Route::get('/dashboard', function () {
@@ -83,20 +85,11 @@ Route::middleware(['auth'])->group(function () {
     // Unified My Account hub
     Route::view('/account', 'account.index')->name('account.index');
 
-    // Profile & Security
-    Route::view('/profile', 'profile.index')->name('profile.edit');
-
     // Orders History & Details
     Route::view('/orders', 'orders.index')->name('orders.index');
     Route::get('/orders/{id}', function ($id) {
         return view('orders.show', ['orderId' => $id]);
     })->name('orders.show');
-
-    // Wishlist
-    Route::view('/wishlist', 'wishlist.index')->name('wishlist.index');
-
-    // Addresses
-    Route::view('/addresses', 'addresses.index')->name('addresses.index');
 });
 
 /*

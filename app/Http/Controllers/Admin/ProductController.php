@@ -60,19 +60,6 @@ class ProductController extends Controller
 
         $product = Product::create($validated);
 
-        // Inventory log for initial stock
-        if ($product->stock > 0) {
-            InventoryLog::create([
-                'product_id'      => $product->id,
-                'user_id'         => auth()->id(),
-                'type'            => 'stock_in',
-                'quantity'        => $product->stock,
-                'quantity_before' => 0,
-                'quantity_after'  => $product->stock,
-                'notes'           => 'Initial stock on product creation',
-            ]);
-        }
-
         // Handle image uploads
         if ($request->hasFile('images')) {
             foreach ($request->file('images') as $index => $file) {

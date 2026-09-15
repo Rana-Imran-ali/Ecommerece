@@ -3,8 +3,11 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\InventoryLog;
 use App\Models\Payment;
+use App\Models\Product;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class PaymentController extends Controller
 {
@@ -74,9 +77,49 @@ class PaymentController extends Controller
             'status' => 'required|in:pending,completed,failed,refunded',
         ]);
 
-        $payment->update([
-            'status' => $validated['status'],
-        ]);
+        $newStatus = $validated['status'];
+
+        DB::transaction(function () use ($payment, $newStatus) {
+            $payment->update([
+                'status' => $newStatus,
+            ]);
+
+            $order = $payment->order;
+            if (!$order) {
+                return;
+            }
+
+            if ($newStatus === 'completed') {
+                if (!in_array($order->status, ['processing', 'out_for_delivery', 'shipped', 'delivered'])) {
+                    $order->update(['status' => 'processing']);
+                }
+            } elseif (in_array($newStatus, ['failed', 'refunded'])) {
+                if ($order->status !== 'cancelled') {
+                    $order->update(['status' => 'cancelled']);
+
+                    // Restore inventory stock and record inventory logs
+                    foreach ($order->items as $item) {
+                        $product = Product::where('id', $item->product_id)->lockForUpdate()->first();
+                        if ($product) {
+                            $before = (int) $product->stock;
+                            $after  = $before + $item->quantity;
+                            $product->update(['stock' => $after]);
+
+                            InventoryLog::create([
+                                'product_id'      => $product->id,
+                                'user_id'         => auth()->id() ?? $order->user_id,
+                                'type'            => 'return',
+                                'quantity'        => $item->quantity,
+                                'quantity_before' => $before,
+                                'quantity_after'  => $after,
+                                'reference_id'    => (string) $order->id,
+                                'notes'           => "Stock restored due to payment {$newStatus} for order #{$order->id}",
+                            ]);
+                        }
+                    }
+                }
+            }
+        });
 
         return back()->with('success', "Payment #{$payment->id} status updated to " . ucfirst($validated['status']) . '.');
     }

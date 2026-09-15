@@ -138,7 +138,8 @@
                 </a>
 
                 <!-- 5. Guest Links (Desktop) -->
-                <div class="nav-guest-only {{ $isAuth ? 'hidden' : 'hidden md:flex' }} items-center space-x-2 pl-3 ml-1 border-l border-gray-200" id="nav-guest-area">
+                @guest
+                <div class="hidden md:flex items-center space-x-2 pl-3 ml-1 border-l border-gray-200" id="nav-guest-area">
                     <a href="{{ url('/login') }}" class="text-sm font-medium text-gray-700 hover:text-indigo-600 transition-colors px-3 py-2 rounded-lg hover:bg-gray-50">
                         Login
                     </a>
@@ -146,9 +147,11 @@
                         Register
                     </a>
                 </div>
+                @endguest
 
                 <!-- 6. Authenticated User Flow (Desktop) -->
-                <div class="nav-auth-only {{ $isAuth ? 'hidden md:flex' : 'hidden' }} items-center space-x-2 pl-3 ml-1 border-l border-gray-200" id="nav-auth-area">
+                @auth
+                <div class="hidden md:flex items-center space-x-2 pl-3 ml-1 border-l border-gray-200" id="nav-auth-area">
                     <!-- Direct My Account / Profile Button: clicking opens customer dashboard -->
                     <a href="{{ url('/account') }}"
                        id="nav-account-btn"
@@ -186,7 +189,7 @@
                             </a>
                             <a href="{{ url('/account') }}#profile" onclick="sessionStorage.setItem('account_tab','profile')" class="flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
-                                My Profile
+                                Profile
                             </a>
                             <a href="{{ url('/account') }}#orders" onclick="sessionStorage.setItem('account_tab','orders')" class="flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>
@@ -214,6 +217,7 @@
                     </div>
 
                 </div>
+                @endauth
 
                 <!-- Mobile Menu Button -->
                 <button type="button"
@@ -292,7 +296,8 @@
         <!-- Mobile User Account Section -->
         <div class="pt-3 pb-3 border-t border-gray-200 px-4">
             <!-- Authenticated Mobile Menu Flow -->
-            <div class="nav-auth-only {{ $isAuth ? 'block' : 'hidden' }} space-y-2">
+            @auth
+            <div class="space-y-2">
                 <div class="flex items-center px-3 py-2 bg-gray-50 rounded-lg">
                     <img src="{{ $avatarUrl }}" alt="Avatar" class="nav-user-avatar w-10 h-10 rounded-full object-cover border-2 border-indigo-200 flex-shrink-0">
                     <div class="ml-3 min-w-0">
@@ -327,9 +332,11 @@
                     Logout
                 </button>
             </div>
+            @endauth
 
             <!-- Guest Mobile Menu Flow -->
-            <div class="nav-guest-only {{ $isAuth ? 'hidden' : 'block' }} space-y-2 pt-1">
+            @guest
+            <div class="space-y-2 pt-1">
                 <a href="{{ url('/login') }}" class="block text-center w-full px-4 py-2 rounded-md text-sm font-semibold text-gray-700 border border-gray-300 hover:bg-gray-50">
                     Login
                 </a>
@@ -337,6 +344,7 @@
                     Register
                 </a>
             </div>
+            @endguest
         </div>
     </div>
 </nav>

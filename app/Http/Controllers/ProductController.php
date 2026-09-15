@@ -188,18 +188,22 @@ class ProductController extends Controller
     /**
      * Remove the specified product (soft-delete, preserving images for order history).
      */
-    public function destroy(Product $product): JsonResponse
-    {
-        $product->delete();
-
-        Cache::forget('categories.all');
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Product deleted successfully.',
-        ], Response::HTTP_OK);
+   public function destroy(Product $product): JsonResponse
+{
+    foreach ($product->images as $image) {
+        Storage::disk('public')->delete($image->image);
+        $image->delete();
     }
 
+    $product->delete();
+
+    Cache::forget('categories.all');
+
+    return response()->json([
+        'success' => true,
+        'message' => 'Product deleted successfully.',
+    ], Response::HTTP_OK);
+}
     /**
      * Upload additional images for an existing product.
      */

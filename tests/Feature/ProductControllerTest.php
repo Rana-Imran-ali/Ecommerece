@@ -297,4 +297,84 @@ class ProductControllerTest extends TestCase
             ]);
         $invalidDec->assertStatus(422);
     }
+
+    public function test_initial_stock_creates_inventory_log_on_product_creation(): void
+    {
+        $payload = [
+            'category_id' => $this->category->id,
+            'name' => 'Mechanical Numpad',
+            'description' => 'Compact numpad with hot-swappable switches',
+            'price' => 39.99,
+            'stock' => 15,
+        ];
+
+        $response = $this->withHeader('Authorization', "Bearer {$this->adminToken}")
+            ->postJson('/api/products', $payload);
+
+        $response->assertCreated();
+
+        $product = Product::where('name', 'Mechanical Numpad')->firstOrFail();
+
+        $this->assertDatabaseHas('inventory_logs', [
+            'product_id'      => $product->id,
+            'user_id'         => $this->admin->id,
+            'type'            => 'stock_in',
+            'quantity'        => 15,
+            'quantity_before' => 0,
+            'quantity_after'  => 15,
+            'notes'           => 'Initial stock on product creation',
+        ]);
+        $this->assertCount(1, $product->inventoryLogs);
+    }
+
+    public function test_zero_initial_stock_does_not_create_inventory_log(): void
+    {
+        $payload = [
+            'category_id' => $this->category->id,
+            'name' => 'Backordered Mousepad',
+            'description' => 'Out of stock on launch',
+            'price' => 19.99,
+            'stock' => 0,
+        ];
+
+        $response = $this->withHeader('Authorization', "Bearer {$this->adminToken}")
+            ->postJson('/api/products', $payload);
+
+        $response->assertCreated();
+
+        $product = Product::where('name', 'Backordered Mousepad')->firstOrFail();
+
+        $this->assertDatabaseMissing('inventory_logs', [
+            'product_id' => $product->id,
+        ]);
+        $this->assertCount(0, $product->inventoryLogs);
+    }
+
+    public function test_admin_web_product_creation_creates_single_inventory_log(): void
+    {
+        $response = $this->actingAs($this->admin)
+            ->post(route('admin.products.store'), [
+                'category_id' => $this->category->id,
+                'name'        => 'Web Admin Product',
+                'description' => 'Created via admin panel',
+                'price'       => 49.99,
+                'stock'       => 30,
+                'status'      => 'active',
+            ]);
+
+        $response->assertRedirect(route('admin.products.index'));
+
+        $product = Product::where('name', 'Web Admin Product')->firstOrFail();
+
+        $this->assertDatabaseHas('inventory_logs', [
+            'product_id'      => $product->id,
+            'user_id'         => $this->admin->id,
+            'type'            => 'stock_in',
+            'quantity'        => 30,
+            'quantity_before' => 0,
+            'quantity_after'  => 30,
+            'notes'           => 'Initial stock on product creation',
+        ]);
+        $this->assertCount(1, $product->inventoryLogs);
+    }
 }

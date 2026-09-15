@@ -134,7 +134,7 @@ class AuthController extends Controller
                 'created_at'       => $user->created_at?->format('Y-m-d H:i:s'),
                 'orders_count'     => $user->orders()->count(),
                 'addresses_count'  => $user->addresses()->count(),
-                'wishlist_count'   => optional($user->wishlist)->items()->count() ?? 0,
+                'wishlist_count'   => $user->wishlist ? $user->wishlist->items()->count() : 0,
             ],
         ], Response::HTTP_OK);
     }

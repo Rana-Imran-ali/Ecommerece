@@ -76,14 +76,20 @@ class StripeController extends Controller
         $discountAmount = 0.0;
 
         if (!empty($validated['coupon_code'])) {
-            $coupon = Coupon::where('code', trim($validated['coupon_code']))
-                ->where('is_active', true)
-                ->first();
+            $coupon = Coupon::where('code', trim($validated['coupon_code']))->first();
 
             if (!$coupon) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Invalid or expired coupon code.',
+                ], Response::HTTP_UNPROCESSABLE_ENTITY);
+            }
+
+            // Check active + expiry + max_uses
+            if ($error = $coupon->globalValidationError()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $error,
                 ], Response::HTTP_UNPROCESSABLE_ENTITY);
             }
 
@@ -105,13 +111,11 @@ class StripeController extends Controller
                 ], Response::HTTP_UNPROCESSABLE_ENTITY);
             }
 
-            $discountAmount = ($subtotal * (float) $coupon->discount_percent) / 100;
-            if ($coupon->max_discount && $discountAmount > (float) $coupon->max_discount) {
-                $discountAmount = (float) $coupon->max_discount;
-            }
+            // Supports 'percent' and 'fixed', always capped at subtotal
+            $discountAmount = $coupon->calculateDiscount($subtotal);
         }
 
-        $totalAmount = max(0, round($subtotal - $discountAmount, 2));
+        $totalAmount = round($subtotal - $discountAmount, 2);
         $amountCents = (int) round($totalAmount * 100);
 
         if ($amountCents < 50) { // Stripe minimum is $0.50
@@ -212,14 +216,20 @@ class StripeController extends Controller
         $discountAmount = 0.0;
 
         if (!empty($validated['coupon_code'])) {
-            $coupon = Coupon::where('code', trim($validated['coupon_code']))
-                ->where('is_active', true)
-                ->first();
+            $coupon = Coupon::where('code', trim($validated['coupon_code']))->first();
 
             if (!$coupon) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Invalid or expired coupon code.',
+                ], Response::HTTP_UNPROCESSABLE_ENTITY);
+            }
+
+            // Check active + expiry + max_uses
+            if ($error = $coupon->globalValidationError()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $error,
                 ], Response::HTTP_UNPROCESSABLE_ENTITY);
             }
 
@@ -242,13 +252,11 @@ class StripeController extends Controller
                 ], Response::HTTP_UNPROCESSABLE_ENTITY);
             }
 
-            $discountAmount = ($subtotal * (float) $coupon->discount_percent) / 100;
-            if ($coupon->max_discount && $discountAmount > (float) $coupon->max_discount) {
-                $discountAmount = (float) $coupon->max_discount;
-            }
+            // Supports 'percent' and 'fixed', always capped at subtotal
+            $discountAmount = $coupon->calculateDiscount($subtotal);
         }
 
-        $totalAmount = max(0, round($subtotal - $discountAmount, 2));
+        $totalAmount = round($subtotal - $discountAmount, 2);
 
         // ── 5. Create Order, Payment & clear cart (DB transaction with pessimistic locks) ──
         try {
@@ -509,6 +517,7 @@ class StripeController extends Controller
             'checkout.session.completed'   => $this->handleCheckoutCompleted($event->data->object),
             'checkout.session.expired'     => $this->handleCheckoutExpired($event->data->object),
             'payment_intent.payment_failed' => $this->handlePaymentFailed($event->data->object),
+            'charge.refunded'              => $this->handleChargeRefunded($event->data->object),
             default                        => null, // Ignore unhandled events
         };
 
@@ -627,6 +636,48 @@ class StripeController extends Controller
             });
 
             Log::info('Stripe webhook: payment failed, order cancelled and stock restored', ['order_id' => $payment->order_id]);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Private: Handle charge.refunded
+    // ─────────────────────────────────────────────────────────────────────────
+    private function handleChargeRefunded(object $charge): void
+    {
+        $paymentIntentId = $charge->payment_intent ?? null;
+        $payment = $paymentIntentId ? Payment::where('stripe_payment_intent_id', $paymentIntentId)->first() : null;
+
+        if ($payment && $payment->status !== 'refunded') {
+            DB::transaction(function () use ($payment) {
+                $payment->update(['status' => 'refunded']);
+                $order = $payment->order;
+                if ($order && $order->status !== 'cancelled') {
+                    $order->update(['status' => 'cancelled']);
+
+                    // Restore stock and record inventory logs
+                    foreach ($order->items as $item) {
+                        $product = Product::where('id', $item->product_id)->lockForUpdate()->first();
+                        if ($product) {
+                            $before = (int) $product->stock;
+                            $after  = $before + $item->quantity;
+                            $product->update(['stock' => $after]);
+
+                            InventoryLog::create([
+                                'product_id'      => $product->id,
+                                'user_id'         => $order->user_id,
+                                'type'            => 'return',
+                                'quantity'        => $item->quantity,
+                                'quantity_before' => $before,
+                                'quantity_after'  => $after,
+                                'reference_id'    => (string) $order->id,
+                                'notes'           => "Stock restored: Stripe charge refunded for order #{$order->id}",
+                            ]);
+                        }
+                    }
+                }
+            });
+
+            Log::info('Stripe webhook: charge refunded, order cancelled and stock restored', ['order_id' => $payment->order_id]);
         }
     }
 }

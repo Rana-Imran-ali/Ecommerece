@@ -52,6 +52,8 @@ class OrderController extends Controller
         $order->update($updateData);
 
         if ($newStatus === 'cancelled' && $oldStatus !== 'cancelled') {
+            $order->payments()->where('status', 'pending')->update(['status' => 'cancelled']);
+
             foreach ($order->items as $item) {
                 $product = $item->product;
                 if ($product) {
