@@ -77,4 +77,21 @@ class Product extends Model
     {
         return $this->hasMany(InventoryLog::class)->latest('id');
     }
+
+    /**
+     * Get all options for the product (e.g., Size, Color).
+     */
+    public function options(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(ProductOption::class);
+    }
+
+    /**
+     * Get all variants for the product.
+     */
+    public function variants(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(ProductVariant::class);
+    }
 }
+

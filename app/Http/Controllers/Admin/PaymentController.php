@@ -3,11 +3,14 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\CouponUsage;
 use App\Models\InventoryLog;
 use App\Models\Payment;
 use App\Models\Product;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Stripe\StripeClient;
 
 class PaymentController extends Controller
 {
@@ -79,6 +82,28 @@ class PaymentController extends Controller
 
         $newStatus = $validated['status'];
 
+        // If card payment is being marked as refunded, trigger Stripe API refund
+        if ($newStatus === 'refunded' && $payment->payment_method === 'card' && !empty($payment->stripe_payment_intent_id)) {
+            $secret = config('services.stripe.secret');
+            if (!empty($secret)) {
+                try {
+                    $stripe = new StripeClient($secret);
+                    $stripe->refunds->create([
+                        'payment_intent' => $payment->stripe_payment_intent_id,
+                    ]);
+                    Log::info("Admin triggered Stripe refund for payment #{$payment->id}, intent {$payment->stripe_payment_intent_id}");
+                } catch (\Stripe\Exception\InvalidRequestException $e) {
+                    if (!str_contains($e->getMessage(), 'already been refunded')) {
+                        Log::error("Stripe refund error for payment #{$payment->id}: " . $e->getMessage());
+                        return back()->with('error', 'Stripe refund error: ' . $e->getMessage());
+                    }
+                } catch (\Exception $e) {
+                    Log::error("Stripe refund failed for payment #{$payment->id}: " . $e->getMessage());
+                    return back()->with('error', 'Failed to issue Stripe refund: ' . $e->getMessage());
+                }
+            }
+        }
+
         DB::transaction(function () use ($payment, $newStatus) {
             $payment->update([
                 'status' => $newStatus,
@@ -96,6 +121,9 @@ class PaymentController extends Controller
             } elseif (in_array($newStatus, ['failed', 'refunded'])) {
                 if ($order->status !== 'cancelled') {
                     $order->update(['status' => 'cancelled']);
+
+                    // Restore coupon usage
+                    CouponUsage::where('order_id', $order->id)->delete();
 
                     // Restore inventory stock and record inventory logs
                     foreach ($order->items as $item) {

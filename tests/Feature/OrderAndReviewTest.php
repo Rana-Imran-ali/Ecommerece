@@ -312,4 +312,97 @@ class OrderAndReviewTest extends TestCase
         $invalidRes->assertStatus(422)
             ->assertJsonPath('success', false);
     }
+
+    public function test_checkout_rejects_replayed_stripe_payment_intent_id(): void
+    {
+        $prevOrder = Order::create([
+            'user_id'      => $this->user1->id,
+            'address_id'   => $this->address1->id,
+            'status'       => 'completed',
+            'total_amount' => 100.00,
+        ]);
+
+        // Existing payment with this intent ID
+        \App\Models\Payment::create([
+            'order_id'                 => $prevOrder->id,
+            'payment_method'           => 'card',
+            'amount'                   => 100.00,
+            'status'                   => 'completed',
+            'stripe_payment_intent_id' => 'pi_test_replayed_intent_123',
+        ]);
+
+        $cart = Cart::create(['user_id' => $this->user1->id]);
+        CartItem::create([
+            'cart_id'    => $cart->id,
+            'product_id' => $this->product->id,
+            'quantity'   => 1,
+        ]);
+
+        $response = $this->withHeader('Authorization', "Bearer {$this->token1}")
+            ->postJson('/api/orders', [
+                'address_id'               => $this->address1->id,
+                'payment_method'           => 'card',
+                'stripe_payment_intent_id' => 'pi_test_replayed_intent_123',
+            ]);
+
+        $response->assertStatus(422)
+            ->assertJsonPath('message', 'This payment has already been processed for an existing order.');
+    }
+
+    public function test_order_cancel_restores_coupon_usage(): void
+    {
+        $cart = Cart::create(['user_id' => $this->user1->id]);
+        CartItem::create([
+            'cart_id'    => $cart->id,
+            'product_id' => $this->product->id,
+            'quantity'   => 1,
+        ]);
+
+        $res = $this->withHeader('Authorization', "Bearer {$this->token1}")
+            ->postJson('/api/orders', [
+                'address_id'     => $this->address1->id,
+                'payment_method' => 'cod',
+                'coupon_code'    => 'SAVE10',
+            ]);
+
+        $res->assertStatus(201);
+        $orderId = $res->json('data.id');
+
+        $this->assertDatabaseHas('coupon_usages', [
+            'order_id' => $orderId,
+            'user_id'  => $this->user1->id,
+        ]);
+
+        // Cancel the order
+        $cancelRes = $this->withHeader('Authorization', "Bearer {$this->token1}")
+            ->patchJson("/api/orders/{$orderId}/cancel");
+
+        $cancelRes->assertOk();
+
+        // Coupon usage must be deleted / restored
+        $this->assertDatabaseMissing('coupon_usages', [
+            'order_id' => $orderId,
+        ]);
+    }
+
+    public function test_create_payment_intent_rejects_insufficient_stock(): void
+    {
+        $this->product->update(['stock' => 1]);
+
+        $cart = Cart::create(['user_id' => $this->user1->id]);
+        CartItem::create([
+            'cart_id'    => $cart->id,
+            'product_id' => $this->product->id,
+            'quantity'   => 5, // exceeds stock of 1
+        ]);
+
+        $res = $this->withHeader('Authorization', "Bearer {$this->token1}")
+            ->postJson('/api/stripe/payment-intent', [
+                'address_id' => $this->address1->id,
+            ]);
+
+        $res->assertStatus(422)
+            ->assertJsonPath('success', false);
+        $this->assertStringContainsString('Insufficient stock', $res->json('message'));
+    }
 }

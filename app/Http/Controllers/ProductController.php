@@ -138,7 +138,7 @@ class ProductController extends Controller
      */
     public function show(Product $product): JsonResponse
     {
-        $product->load(['category', 'images']);
+        $product->load(['category', 'images', 'options.values', 'variants.optionValues.option']);
 
         return response()->json([
             'success' => true,
@@ -151,6 +151,28 @@ class ProductController extends Controller
                 'price' => (float) $product->price,
                 'stock' => (int) $product->stock,
                 'in_stock' => $product->stock > 0,
+                'options' => $product->options->map(function ($opt) {
+                    return [
+                        'id' => $opt->id,
+                        'name' => $opt->name,
+                        'values' => $opt->values->map(fn($v) => [
+                            'id' => $v->id,
+                            'value' => $v->value,
+                        ]),
+                    ];
+                }),
+                'variants' => $product->variants->map(function ($v) {
+                    return [
+                        'id' => $v->id,
+                        'sku' => $v->sku,
+                        'price' => $v->price !== null ? (float) $v->price : null,
+                        'effective_price' => $v->effective_price,
+                        'stock' => (int) $v->stock,
+                        'status' => $v->status,
+                        'title' => $v->title,
+                        'option_value_ids' => $v->optionValues->pluck('id')->all(),
+                    ];
+                }),
                 'images' => $product->images->map(function ($image) {
                     return [
                         'id' => $image->id,

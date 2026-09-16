@@ -11,6 +11,7 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Payment;
 use App\Models\Product;
+use App\Models\ProductVariant;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -108,7 +109,7 @@ class OrderController extends Controller
 
         // ── 4. Fetch user cart ────────────────────────────────────────────────
         $cart = Cart::where('user_id', $user->id)
-            ->with(['items.product'])
+            ->with(['items.product', 'items.variant.optionValues.option'])
             ->first();
 
         if (!$cart || $cart->items->isEmpty()) {
@@ -127,10 +128,13 @@ class OrderController extends Controller
                 ], Response::HTTP_UNPROCESSABLE_ENTITY);
             }
 
-            if ($item->product->stock < $item->quantity) {
+            $availableStock = $item->variant ? (int) $item->variant->stock : (int) $item->product->stock;
+            $itemName = $item->variant ? "{$item->product->name} ({$item->variant->title})" : $item->product->name;
+
+            if ($availableStock < $item->quantity) {
                 return response()->json([
                     'success' => false,
-                    'message' => "Insufficient stock for '{$item->product->name}'. Available: {$item->product->stock}, Requested: {$item->quantity}.",
+                    'message' => "Insufficient stock for '{$itemName}'. Available: {$availableStock}, Requested: {$item->quantity}.",
                 ], Response::HTTP_UNPROCESSABLE_ENTITY);
             }
         }
@@ -143,11 +147,29 @@ class OrderController extends Controller
         if ($paymentMethod === 'card') {
             $stripePaymentIntentId = $validated['stripe_payment_intent_id'];
 
+            // 1. Prevent replay / double-spending
+            if (Payment::where('stripe_payment_intent_id', $stripePaymentIntentId)->exists()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This payment has already been processed for an existing order.',
+                ], Response::HTTP_UNPROCESSABLE_ENTITY);
+            }
+
             try {
                 $stripe = new \Stripe\StripeClient(config('services.stripe.secret'));
-                $intent = $stripe->paymentIntents->retrieve($stripePaymentIntentId);
+                $intent = $stripe->paymentIntents->retrieve($stripePaymentIntentId, [
+                    'expand' => ['latest_charge.payment_method_details'],
+                ]);
 
-                // Ensure the PaymentIntent succeeded and belongs to this amount range
+                // 2. Verify payment intent ownership matches authenticated user
+                if (isset($intent->metadata->user_id) && (int) $intent->metadata->user_id !== (int) $user->id) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Payment authorization does not belong to your account.',
+                    ], Response::HTTP_FORBIDDEN);
+                }
+
+                // Ensure the PaymentIntent succeeded
                 if ($intent->status !== 'succeeded') {
                     return response()->json([
                         'success' => false,
@@ -161,7 +183,11 @@ class OrderController extends Controller
                 $cardLast4      = null;
                 $cardholderName = null;
 
-                if ($charge && isset($intent->charges->data[0])) {
+                if (is_object($charge)) {
+                    $cardBrand      = $charge->payment_method_details->card->brand ?? null;
+                    $cardLast4      = $charge->payment_method_details->card->last4 ?? null;
+                    $cardholderName = $charge->billing_details->name ?? null;
+                } elseif (isset($intent->charges->data[0])) {
                     $chargeData     = $intent->charges->data[0];
                     $cardBrand      = $chargeData->payment_method_details->card->brand ?? null;
                     $cardLast4      = $chargeData->payment_method_details->card->last4 ?? null;
@@ -191,7 +217,7 @@ class OrderController extends Controller
         }
 
         // ── 7. Optional Coupon Calculation ────────────────────────────────────
-        $subtotal       = $cart->items->sum(fn($i) => (float) $i->product->price * $i->quantity);
+        $subtotal = $cart->items->sum(fn($i) => ($i->variant ? $i->variant->effective_price : (float) $i->product->price) * $i->quantity);
         $coupon         = null;
         $discountAmount = 0.0;
 
@@ -276,31 +302,54 @@ class OrderController extends Controller
                     foreach ($cart->items as $cartItem) {
                         $product = Product::where('id', $cartItem->product_id)->lockForUpdate()->first();
 
-                        if (!$product || $product->stock < $cartItem->quantity) {
-                            throw new \RuntimeException("Insufficient stock for '{$cartItem->product->name}'. Available: " . ($product->stock ?? 0));
+                        $variant = null;
+                        $itemPrice = (float) ($product ? $product->price : 0);
+                        $variantName = null;
+                        $variantBeforeStock = null;
+                        $variantAfterStock = null;
+
+                        if ($cartItem->product_variant_id) {
+                            $variant = ProductVariant::where('id', $cartItem->product_variant_id)->lockForUpdate()->first();
+                            if (!$variant || $variant->stock < $cartItem->quantity) {
+                                $varTitle = $cartItem->variant?->title ?? 'Variant';
+                                throw new \RuntimeException("Insufficient stock for '{$cartItem->product->name} ({$varTitle})'. Available: " . ($variant->stock ?? 0));
+                            }
+                            $itemPrice = $variant->effective_price;
+                            $variantName = $variant->title;
+
+                            $variantBeforeStock = (int) $variant->stock;
+                            $variantAfterStock  = $variantBeforeStock - $cartItem->quantity;
+                            $variant->update(['stock' => $variantAfterStock]);
+                        } else {
+                            if (!$product || $product->stock < $cartItem->quantity) {
+                                throw new \RuntimeException("Insufficient stock for '{$cartItem->product->name}'. Available: " . ($product->stock ?? 0));
+                            }
                         }
 
                         $beforeStock = (int) $product->stock;
-                        $afterStock  = $beforeStock - $cartItem->quantity;
+                        $afterStock  = max(0, $beforeStock - $cartItem->quantity);
                         $product->update(['stock' => $afterStock]);
 
                         OrderItem::create([
-                            'order_id'     => $order->id,
-                            'product_id'   => $cartItem->product_id,
-                            'product_name' => $product->name,
-                            'quantity'     => $cartItem->quantity,
-                            'price'        => (float) $product->price,
+                            'order_id'           => $order->id,
+                            'product_id'         => $cartItem->product_id,
+                            'product_variant_id' => $variant?->id,
+                            'product_name'       => $product->name,
+                            'variant_name'       => $variantName,
+                            'quantity'           => $cartItem->quantity,
+                            'price'              => $itemPrice,
                         ]);
 
                         InventoryLog::create([
-                            'product_id'      => $product->id,
-                            'user_id'         => $user->id,
-                            'type'            => 'sale',
-                            'quantity'        => -$cartItem->quantity,
-                            'quantity_before' => $beforeStock,
-                            'quantity_after'  => $afterStock,
-                            'reference_id'    => (string) $order->id,
-                            'notes'           => "Order #{$order->id} placed via " . strtoupper($paymentMethod),
+                            'product_id'         => $product->id,
+                            'product_variant_id' => $variant?->id,
+                            'user_id'            => $user->id,
+                            'type'               => 'sale',
+                            'quantity'           => -$cartItem->quantity,
+                            'quantity_before'    => $variant ? $variantBeforeStock : $beforeStock,
+                            'quantity_after'     => $variant ? $variantAfterStock : $afterStock,
+                            'reference_id'       => (string) $order->id,
+                            'notes'              => "Order #{$order->id} placed via " . strtoupper($paymentMethod) . ($variantName ? " ({$variantName})" : ''),
                         ]);
                     }
 
@@ -336,6 +385,25 @@ class OrderController extends Controller
                 }
             );
         } catch (\RuntimeException $e) {
+            // If card payment already succeeded but order placement failed (e.g. out of stock),
+            // trigger an automatic refund immediately to prevent customer fund loss!
+            if ($paymentMethod === 'card' && !empty($stripePaymentIntentId)) {
+                try {
+                    $stripe = new \Stripe\StripeClient(config('services.stripe.secret'));
+                    $stripe->refunds->create([
+                        'payment_intent' => $stripePaymentIntentId,
+                    ]);
+                    Log::info("Automatic refund issued for PaymentIntent {$stripePaymentIntentId} due to order placement failure: " . $e->getMessage());
+                } catch (\Exception $refEx) {
+                    Log::error("Failed to auto-refund PaymentIntent {$stripePaymentIntentId}", ['error' => $refEx->getMessage()]);
+                }
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Your order could not be completed because an item became unavailable. Your card payment was automatically refunded.',
+                ], Response::HTTP_UNPROCESSABLE_ENTITY);
+            }
+
             return response()->json([
                 'success' => false,
                 'message' => $e->getMessage(),
@@ -372,23 +440,40 @@ class OrderController extends Controller
         }
 
         DB::transaction(function () use ($order, $request) {
+            // Restore coupon usage if order is cancelled
+            CouponUsage::where('order_id', $order->id)->delete();
+
             // Restore inventory stock for each item with pessimistic lock
             foreach ($order->items as $item) {
                 $product = Product::where('id', $item->product_id)->lockForUpdate()->first();
+                $variant = null;
+                $variantBefore = null;
+                $variantAfter = null;
+
+                if ($item->product_variant_id) {
+                    $variant = ProductVariant::where('id', $item->product_variant_id)->lockForUpdate()->first();
+                    if ($variant) {
+                        $variantBefore = (int) $variant->stock;
+                        $variantAfter  = $variantBefore + $item->quantity;
+                        $variant->update(['stock' => $variantAfter]);
+                    }
+                }
+
                 if ($product) {
                     $before = (int) $product->stock;
                     $after  = $before + $item->quantity;
                     $product->update(['stock' => $after]);
 
                     InventoryLog::create([
-                        'product_id'      => $product->id,
-                        'user_id'         => $request->user()->id,
-                        'type'            => 'return',
-                        'quantity'        => $item->quantity,
-                        'quantity_before' => $before,
-                        'quantity_after'  => $after,
-                        'reference_id'    => (string) $order->id,
-                        'notes'           => "Stock restored due to customer order #{$order->id} cancellation",
+                        'product_id'         => $product->id,
+                        'product_variant_id' => $variant?->id,
+                        'user_id'            => $request->user()->id,
+                        'type'               => 'return',
+                        'quantity'           => $item->quantity,
+                        'quantity_before'    => $variant ? $variantBefore : $before,
+                        'quantity_after'     => $variant ? $variantAfter : $after,
+                        'reference_id'       => (string) $order->id,
+                        'notes'              => "Stock restored due to customer order #{$order->id} cancellation" . ($item->variant_name ? " ({$item->variant_name})" : ''),
                     ]);
                 }
             }

@@ -59,7 +59,7 @@ class StripeController extends Controller
 
         // Load cart
         $cart = Cart::where('user_id', $user->id)
-            ->with(['items.product'])
+            ->with(['items.product', 'items.variant.optionValues.option'])
             ->first();
 
         if (!$cart || $cart->items->isEmpty()) {
@@ -69,8 +69,28 @@ class StripeController extends Controller
             ], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
+        // Pre-flight stock check
+        foreach ($cart->items as $item) {
+            if (!$item->product) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'A product in your cart is no longer available.',
+                ], Response::HTTP_UNPROCESSABLE_ENTITY);
+            }
+
+            $availableStock = $item->variant ? (int) $item->variant->stock : (int) $item->product->stock;
+            $itemName = $item->variant ? "{$item->product->name} ({$item->variant->title})" : $item->product->name;
+
+            if ($availableStock < $item->quantity) {
+                return response()->json([
+                    'success' => false,
+                    'message' => "Insufficient stock for '{$itemName}'. Available: {$availableStock}, Requested: {$item->quantity}.",
+                ], Response::HTTP_UNPROCESSABLE_ENTITY);
+            }
+        }
+
         // Calculate subtotal
-        $subtotal = $cart->items->sum(fn($i) => (float) $i->product->price * $i->quantity);
+        $subtotal = $cart->items->sum(fn($i) => ($i->variant ? $i->variant->effective_price : (float) $i->product->price) * $i->quantity);
 
         // Optional coupon discount
         $discountAmount = 0.0;
@@ -131,9 +151,10 @@ class StripeController extends Controller
                 'currency' => 'usd',
                 'automatic_payment_methods' => ['enabled' => true],
                 'metadata' => [
-                    'user_id'      => $user->id,
-                    'address_id'   => $address->id,
-                    'coupon_code'  => $validated['coupon_code'] ?? '',
+                    'user_id'        => (string) $user->id,
+                    'address_id'     => (string) $address->id,
+                    'customer_email' => !empty($validated['customer_email']) ? trim($validated['customer_email']) : (string) $user->email,
+                    'coupon_code'    => $validated['coupon_code'] ?? '',
                 ],
             ]);
         } catch (\Exception $e) {
@@ -463,6 +484,9 @@ class StripeController extends Controller
                     $order->update(['status' => 'cancelled']);
                     $order->payments()->update(['status' => 'cancelled']);
 
+                    // Restore coupon usage if order is cancelled
+                    CouponUsage::where('order_id', $order->id)->delete();
+
                     foreach ($order->items as $item) {
                         $product = Product::where('id', $item->product_id)->lockForUpdate()->first();
                         if ($product) {
@@ -514,6 +538,7 @@ class StripeController extends Controller
 
         // ── Route events ────────────────────────────────────────────────────
         match ($event->type) {
+            'payment_intent.succeeded'     => $this->handlePaymentIntentSucceeded($event->data->object),
             'checkout.session.completed'   => $this->handleCheckoutCompleted($event->data->object),
             'checkout.session.expired'     => $this->handleCheckoutExpired($event->data->object),
             'payment_intent.payment_failed' => $this->handlePaymentFailed($event->data->object),
@@ -523,6 +548,159 @@ class StripeController extends Controller
 
         // Always return 200 so Stripe stops retrying
         return response('Webhook received.', Response::HTTP_OK);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Private: Handle payment_intent.succeeded
+    // ─────────────────────────────────────────────────────────────────────────
+    private function handlePaymentIntentSucceeded(object $intent): void
+    {
+        $paymentIntentId = $intent->id;
+        $payment = Payment::where('stripe_payment_intent_id', $paymentIntentId)->first();
+
+        // If payment record already exists (created by frontend via /api/orders)
+        if ($payment) {
+            if ($payment->status !== 'completed') {
+                DB::transaction(function () use ($payment) {
+                    $payment->update(['status' => 'completed']);
+                    $payment->order()->update(['status' => 'processing']);
+                });
+            }
+            Log::info('Stripe webhook: payment_intent.succeeded already recorded', ['intent_id' => $paymentIntentId]);
+            return;
+        }
+
+        // If client disconnected before posting to /api/orders:
+        // Recover metadata to fulfill order or auto-refund
+        $userId        = isset($intent->metadata->user_id) ? (int) $intent->metadata->user_id : null;
+        $addressId     = isset($intent->metadata->address_id) ? (int) $intent->metadata->address_id : null;
+        $customerEmail = $intent->metadata->customer_email ?? null;
+        $couponCode    = $intent->metadata->coupon_code ?? null;
+
+        if (!$userId || !$addressId) {
+            Log::warning('Stripe webhook: payment_intent.succeeded missing user or address metadata', ['intent_id' => $paymentIntentId]);
+            return;
+        }
+
+        $address = Address::where('id', $addressId)->where('user_id', $userId)->first();
+        $cart    = Cart::where('user_id', $userId)->with(['items.product', 'user'])->first();
+
+        if (!$address || !$cart || $cart->items->isEmpty()) {
+            $this->refundPaymentIntent($paymentIntentId, 'Cart empty or address missing on webhook fulfillment');
+            return;
+        }
+
+        // Check stock availability
+        foreach ($cart->items as $cartItem) {
+            if (!$cartItem->product || $cartItem->product->stock < $cartItem->quantity) {
+                $this->refundPaymentIntent($paymentIntentId, 'Stock depleted before webhook fulfillment');
+                return;
+            }
+        }
+
+        // Calculate totals
+        $subtotal       = $cart->items->sum(fn($i) => (float) $i->product->price * $i->quantity);
+        $coupon         = null;
+        $discountAmount = 0.0;
+
+        if (!empty($couponCode)) {
+            $coupon = Coupon::where('code', trim($couponCode))->first();
+            if ($coupon && !$coupon->globalValidationError()) {
+                $alreadyUsed = CouponUsage::where('coupon_id', $coupon->id)->where('user_id', $userId)->exists();
+                if (!$alreadyUsed && (!$coupon->min_order_amount || $subtotal >= (float) $coupon->min_order_amount)) {
+                    $discountAmount = $coupon->calculateDiscount($subtotal);
+                } else {
+                    $coupon = null;
+                }
+            } else {
+                $coupon = null;
+            }
+        }
+
+        $totalAmount   = round($subtotal - $discountAmount, 2);
+        $expectedCents = (int) round($totalAmount * 100);
+
+        if (abs((int) $intent->amount - $expectedCents) > 1) {
+            $this->refundPaymentIntent($paymentIntentId, 'Amount mismatch on webhook fulfillment');
+            return;
+        }
+
+        // Fulfill order in database transaction
+        try {
+            DB::transaction(function () use ($userId, $customerEmail, $address, $cart, $totalAmount, $coupon, $paymentIntentId) {
+                $expectedDeliveryDate = now()->addDays(4)->toDateString();
+                $order = Order::create([
+                    'user_id'                => $userId,
+                    'customer_email'         => $customerEmail ?: ($cart->user?->email ?? ''),
+                    'address_id'             => $address->id,
+                    'status'                 => 'processing',
+                    'expected_delivery_date' => $expectedDeliveryDate,
+                    'total_amount'           => $totalAmount,
+                ]);
+
+                foreach ($cart->items as $cartItem) {
+                    $product = Product::where('id', $cartItem->product_id)->lockForUpdate()->first();
+                    $beforeStock = (int) $product->stock;
+                    $afterStock  = $beforeStock - $cartItem->quantity;
+                    $product->update(['stock' => $afterStock]);
+
+                    OrderItem::create([
+                        'order_id'     => $order->id,
+                        'product_id'   => $cartItem->product_id,
+                        'product_name' => $product->name,
+                        'quantity'     => $cartItem->quantity,
+                        'price'        => (float) $product->price,
+                    ]);
+
+                    InventoryLog::create([
+                        'product_id'      => $product->id,
+                        'user_id'         => $userId,
+                        'type'            => 'sale',
+                        'quantity'        => -$cartItem->quantity,
+                        'quantity_before' => $beforeStock,
+                        'quantity_after'  => $afterStock,
+                        'reference_id'    => (string) $order->id,
+                        'notes'           => "Order #{$order->id} placed via Stripe payment_intent webhook",
+                    ]);
+                }
+
+                if ($coupon) {
+                    CouponUsage::create([
+                        'coupon_id' => $coupon->id,
+                        'user_id'   => $userId,
+                        'order_id'  => $order->id,
+                    ]);
+                }
+
+                Payment::create([
+                    'order_id'                 => $order->id,
+                    'payment_method'           => 'card',
+                    'amount'                   => $totalAmount,
+                    'status'                   => 'completed',
+                    'stripe_payment_intent_id' => $paymentIntentId,
+                    'transaction_reference'    => $paymentIntentId,
+                ]);
+
+                $cart->items()->delete();
+            });
+
+            Log::info('Stripe webhook: order successfully fulfilled from payment_intent.succeeded', ['intent_id' => $paymentIntentId]);
+        } catch (\Exception $e) {
+            Log::error('Stripe webhook: order fulfillment failed, triggering refund', ['error' => $e->getMessage(), 'intent_id' => $paymentIntentId]);
+            $this->refundPaymentIntent($paymentIntentId, 'Order fulfillment database transaction failed');
+        }
+    }
+
+    private function refundPaymentIntent(string $paymentIntentId, string $reason): void
+    {
+        try {
+            $this->stripe->refunds->create([
+                'payment_intent' => $paymentIntentId,
+            ]);
+            Log::info("Stripe refund issued for intent {$paymentIntentId}: {$reason}");
+        } catch (\Exception $e) {
+            Log::error("Stripe refund failed for intent {$paymentIntentId}: " . $e->getMessage());
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -574,6 +752,9 @@ class StripeController extends Controller
                 $order = $payment->order;
                 $order->update(['status' => 'cancelled']);
 
+                // Restore coupon usage if order is cancelled
+                CouponUsage::where('order_id', $order->id)->delete();
+
                 // Restore stock and record inventory logs
                 foreach ($order->items as $item) {
                     $product = Product::where('id', $item->product_id)->lockForUpdate()->first();
@@ -612,6 +793,9 @@ class StripeController extends Controller
                 $payment->update(['status' => 'failed']);
                 $order = $payment->order;
                 $order->update(['status' => 'cancelled']);
+
+                // Restore coupon usage if order is cancelled
+                CouponUsage::where('order_id', $order->id)->delete();
 
                 // Restore stock and record inventory logs
                 foreach ($order->items as $item) {
@@ -653,6 +837,9 @@ class StripeController extends Controller
                 $order = $payment->order;
                 if ($order && $order->status !== 'cancelled') {
                     $order->update(['status' => 'cancelled']);
+
+                    // Restore coupon usage
+                    CouponUsage::where('order_id', $order->id)->delete();
 
                     // Restore stock and record inventory logs
                     foreach ($order->items as $item) {

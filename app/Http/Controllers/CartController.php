@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Cart;
 use App\Models\CartItem;
 use App\Models\Product;
+use App\Models\ProductVariant;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -21,11 +22,16 @@ class CartController extends Controller
         $cart = Cart::firstOrCreate(['user_id' => $user->id]);
 
         $items = CartItem::where('cart_id', $cart->id)
-            ->with(['product.primaryImage', 'product.category'])
+            ->with([
+                'product.primaryImage',
+                'product.category',
+                'variant.optionValues.option',
+            ])
             ->get();
 
         $subtotal = $items->sum(function ($item) {
-            return ($item->product ? (float) $item->product->price : 0) * $item->quantity;
+            $unitPrice = $item->variant ? $item->variant->effective_price : ($item->product ? (float) $item->product->price : 0);
+            return $unitPrice * $item->quantity;
         });
 
         $totalItems = $items->sum('quantity');
@@ -47,45 +53,65 @@ class CartController extends Controller
     public function add(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'product_id' => ['required', 'integer', 'exists:products,id'],
-            'quantity' => ['required', 'integer', 'min:1'],
+            'product_id'         => ['required', 'integer', 'exists:products,id'],
+            'product_variant_id' => ['nullable', 'integer', 'exists:product_variants,id'],
+            'quantity'           => ['required', 'integer', 'min:1'],
         ]);
 
         $product = Product::findOrFail($validated['product_id']);
+        $variant = null;
 
-        if ($product->stock < $validated['quantity']) {
+        if (!empty($validated['product_variant_id'])) {
+            $variant = ProductVariant::where('id', $validated['product_variant_id'])
+                ->where('product_id', $product->id)
+                ->firstOrFail();
+
+            $availableStock = (int) $variant->stock;
+        } else {
+            $availableStock = (int) $product->stock;
+        }
+
+        if ($availableStock < $validated['quantity']) {
             return response()->json([
                 'success' => false,
-                'message' => "Insufficient stock. Only {$product->stock} item(s) available.",
+                'message' => "Insufficient stock. Only {$availableStock} item(s) available.",
             ], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
         $cart = Cart::firstOrCreate(['user_id' => $request->user()->id]);
 
-        $item = CartItem::where('cart_id', $cart->id)
-            ->where('product_id', $product->id)
-            ->first();
+        $itemQuery = CartItem::where('cart_id', $cart->id)
+            ->where('product_id', $product->id);
+
+        if ($variant) {
+            $itemQuery->where('product_variant_id', $variant->id);
+        } else {
+            $itemQuery->whereNull('product_variant_id');
+        }
+
+        $item = $itemQuery->first();
 
         if ($item) {
             $newQuantity = $item->quantity + $validated['quantity'];
 
-            if ($newQuantity > $product->stock) {
+            if ($newQuantity > $availableStock) {
                 return response()->json([
                     'success' => false,
-                    'message' => "Cannot add more. Only {$product->stock} item(s) in stock (already have {$item->quantity} in cart).",
+                    'message' => "Cannot add more. Only {$availableStock} item(s) in stock (already have {$item->quantity} in cart).",
                 ], Response::HTTP_UNPROCESSABLE_ENTITY);
             }
 
             $item->update(['quantity' => $newQuantity]);
         } else {
             $item = CartItem::create([
-                'cart_id' => $cart->id,
-                'product_id' => $product->id,
-                'quantity' => $validated['quantity'],
+                'cart_id'            => $cart->id,
+                'product_id'         => $product->id,
+                'product_variant_id' => $variant?->id,
+                'quantity'           => $validated['quantity'],
             ]);
         }
 
-        $item->load(['product.primaryImage']);
+        $item->load(['product.primaryImage', 'variant.optionValues.option']);
 
         return response()->json([
             'success' => true,
@@ -107,17 +133,19 @@ class CartController extends Controller
             ->where('user_id', $request->user()->id)
             ->firstOrFail();
 
-        $product = Product::findOrFail($cartItem->product_id);
+        $cartItem->load(['product', 'variant']);
 
-        if ($validated['quantity'] > $product->stock) {
+        $availableStock = $cartItem->variant ? (int) $cartItem->variant->stock : (int) $cartItem->product->stock;
+
+        if ($validated['quantity'] > $availableStock) {
             return response()->json([
                 'success' => false,
-                'message' => "Requested quantity exceeds available stock ({$product->stock}).",
+                'message' => "Requested quantity exceeds available stock ({$availableStock}).",
             ], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
         $cartItem->update(['quantity' => $validated['quantity']]);
-        $cartItem->load(['product.primaryImage']);
+        $cartItem->load(['product.primaryImage', 'variant.optionValues.option']);
 
         return response()->json([
             'success' => true,

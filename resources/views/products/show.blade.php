@@ -101,6 +101,110 @@
         `;
     }
 
+    let currentProduct = null;
+    let selectedOptions = {};
+    let currentVariant = null;
+
+    function findMatchingVariant() {
+        if (!currentProduct || !currentProduct.variants || !currentProduct.variants.length) {
+            return null;
+        }
+        const selectedValueIds = Object.values(selectedOptions);
+        if (selectedValueIds.length !== (currentProduct.options?.length || 0)) {
+            return null;
+        }
+        return currentProduct.variants.find(v => {
+            if (v.option_value_ids.length !== selectedValueIds.length) return false;
+            return selectedValueIds.every(id => v.option_value_ids.includes(id));
+        }) || null;
+    }
+
+    function selectOption(optionId, valueId) {
+        selectedOptions[optionId] = valueId;
+        renderOptionPills();
+        updateVariantState();
+    }
+
+    function renderOptionPills() {
+        if (!currentProduct?.options) return;
+        currentProduct.options.forEach(opt => {
+            opt.values.forEach(val => {
+                const btn = document.getElementById(`opt-btn-${opt.id}-${val.id}`);
+                if (!btn) return;
+                const isSelected = selectedOptions[opt.id] === val.id;
+                if (isSelected) {
+                    btn.className = 'px-3.5 py-1.5 rounded-md border-2 border-indigo-600 bg-indigo-50 text-indigo-700 text-xs font-bold transition-all shadow-sm';
+                } else {
+                    btn.className = 'px-3.5 py-1.5 rounded-md border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 text-xs font-medium transition-all';
+                }
+            });
+        });
+    }
+
+    function updateVariantState() {
+        if (!currentProduct?.options || currentProduct.options.length === 0) {
+            return;
+        }
+
+        currentVariant = findMatchingVariant();
+        const priceEl = document.getElementById('product-display-price');
+        const badgeEl = document.getElementById('product-stock-badge');
+        const skuEl = document.getElementById('product-sku-display');
+        const qtyInput = document.getElementById('quantity-input');
+        const maxLabel = document.getElementById('quantity-max-label');
+        const addBtn = document.getElementById('btn-add-detail');
+        const whatsappLink = document.getElementById('product-whatsapp-link');
+
+        if (currentVariant) {
+            const price = parseFloat(currentVariant.effective_price).toFixed(2);
+            if (priceEl) priceEl.textContent = `$${price}`;
+            if (skuEl) skuEl.textContent = currentVariant.sku ? `SKU: ${currentVariant.sku}` : '';
+
+            const inStock = currentVariant.stock > 0;
+            if (badgeEl) {
+                badgeEl.className = inStock
+                    ? 'px-2.5 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-800'
+                    : 'px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-800';
+                badgeEl.textContent = inStock ? `In Stock (${currentVariant.stock} units)` : 'Out of Stock';
+            }
+
+            if (qtyInput) {
+                qtyInput.max = currentVariant.stock;
+                if (parseInt(qtyInput.value) > currentVariant.stock) {
+                    qtyInput.value = Math.max(1, currentVariant.stock);
+                }
+                if (maxLabel) maxLabel.textContent = `(Max: ${currentVariant.stock})`;
+            }
+
+            if (addBtn) {
+                if (inStock) {
+                    addBtn.disabled = false;
+                    addBtn.className = 'flex-1 py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-md shadow-sm transition-colors cursor-pointer';
+                    addBtn.textContent = 'Add to Cart';
+                } else {
+                    addBtn.disabled = true;
+                    addBtn.className = 'flex-1 py-2.5 px-4 bg-gray-300 text-gray-500 text-sm font-bold rounded-md shadow-sm cursor-not-allowed';
+                    addBtn.textContent = 'Out of Stock';
+                }
+            }
+
+            if (whatsappLink) {
+                const text = `Hello! I would like to ask about: ${currentProduct.name} (${currentVariant.title}) - $${price}\n${window.location.href}`;
+                whatsappLink.href = `https://wa.me/{{ preg_replace('/[^0-9]/', '', config('whatsapp.support_phone', '18005550199')) }}?text=${encodeURIComponent(text)}`;
+            }
+        } else {
+            if (badgeEl) {
+                badgeEl.className = 'px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800';
+                badgeEl.textContent = 'Combination Unavailable';
+            }
+            if (addBtn) {
+                addBtn.disabled = true;
+                addBtn.className = 'flex-1 py-2.5 px-4 bg-gray-300 text-gray-500 text-sm font-bold rounded-md shadow-sm cursor-not-allowed';
+                addBtn.textContent = 'Unavailable';
+            }
+        }
+    }
+
     async function loadProductDetails() {
         const container = document.getElementById('product-details-card');
 
@@ -120,7 +224,32 @@
         const p = res.data?.data;
         if (!p) return;
 
-        const inStock = p.stock > 0;
+        currentProduct = p;
+        selectedOptions = {};
+        currentVariant = null;
+
+        const hasVariants = p.options && p.options.length > 0 && p.variants && p.variants.length > 0;
+
+        if (hasVariants) {
+            const defaultVariant = p.variants.find(v => v.stock > 0) || p.variants[0];
+            if (defaultVariant) {
+                currentVariant = defaultVariant;
+                p.options.forEach(opt => {
+                    const matchedVal = opt.values.find(val => defaultVariant.option_value_ids.includes(val.id));
+                    if (matchedVal) {
+                        selectedOptions[opt.id] = matchedVal.id;
+                    } else if (opt.values[0]) {
+                        selectedOptions[opt.id] = opt.values[0].id;
+                    }
+                });
+            }
+        }
+
+        const initialPrice = currentVariant ? currentVariant.effective_price : p.price;
+        const initialStock = currentVariant ? currentVariant.stock : p.stock;
+        const inStock = initialStock > 0;
+        const initialSku = currentVariant?.sku || '';
+
         const primaryImgObj = p.images?.find(i => i.is_primary) || p.images?.[0];
         const resolveImgUrl = (img) => {
             if (!img) return null;
@@ -154,17 +283,18 @@
                 </div>
 
                 <div class="space-y-4">
-                    <div class="text-xs font-semibold text-indigo-600 uppercase tracking-wider">
-                        Category: ${p.category?.name || 'General'}
+                    <div class="flex items-center justify-between text-xs font-semibold text-indigo-600 uppercase tracking-wider">
+                        <span>Category: ${p.category?.name || 'General'}</span>
+                        <span id="product-sku-display" class="text-gray-400 font-mono font-normal">${initialSku ? `SKU: ${initialSku}` : ''}</span>
                     </div>
 
                     <h1 class="text-3xl font-bold text-gray-900 tracking-tight">${p.name}</h1>
 
                     <div class="flex items-center space-x-3">
-                        <span class="text-2xl font-bold text-gray-900">$${parseFloat(p.price).toFixed(2)}</span>
-                        ${inStock 
-                            ? `<span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-800">In Stock (${p.stock} units)</span>`
-                            : `<span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-800">Out of Stock</span>`}
+                        <span id="product-display-price" class="text-2xl font-bold text-gray-900">$${parseFloat(initialPrice).toFixed(2)}</span>
+                        <span id="product-stock-badge" class="px-2.5 py-0.5 rounded-full text-xs font-semibold ${inStock ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
+                            ${inStock ? `In Stock (${initialStock} units)` : 'Out of Stock'}
+                        </span>
                     </div>
 
                     <div class="border-t border-b border-gray-100 py-4 text-sm text-gray-600 leading-relaxed whitespace-pre-line">

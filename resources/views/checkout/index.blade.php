@@ -184,20 +184,25 @@
                             </div>
                         </div>
 
+                        <!-- Card Panel Alert Banner (Inline) -->
+                        <div id="card-panel-alert" class="hidden"></div>
+
                         <!-- Cardholder Name -->
                         <div>
-                            <label class="block text-xs font-semibold text-gray-600 mb-1">Cardholder Full Name</label>
+                            <label class="block text-xs font-semibold text-gray-600 mb-1">Cardholder Full Name <span class="text-red-500">*</span></label>
                             <input type="text" id="cardholder-name"
                                    placeholder="Name as it appears on card"
+                                   oninput="clearPaymentErrors()"
                                    class="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition">
+                            <p id="cardholder-name-error" class="text-red-600 text-xs mt-1 hidden"></p>
                         </div>
 
                         <!-- Stripe Card Element -->
                         <div>
-                            <label class="block text-xs font-semibold text-gray-600 mb-1">Card Number, Expiry &amp; CVV</label>
+                            <label class="block text-xs font-semibold text-gray-600 mb-1">Card Number, Expiry &amp; CVV <span class="text-red-500">*</span></label>
                             <div id="stripe-card-element"
                                  class="px-3 py-3 border border-gray-300 rounded-lg bg-white focus-within:ring-2 focus-within:ring-indigo-400 transition min-h-[42px]"></div>
-                            <div id="card-errors" class="text-red-500 text-xs mt-1.5 hidden"></div>
+                            <div id="card-errors" class="text-red-600 text-xs mt-2 hidden"></div>
                         </div>
 
                         <!-- Accepted cards -->
@@ -211,7 +216,7 @@
 
                         <!-- Processing status -->
                         <div id="card-processing-status" class="hidden text-xs text-indigo-600 font-medium animate-pulse">
-                            🔐 Verifying payment securely...
+                            🔐 Verifying card securely...
                         </div>
                     </div>
 
@@ -315,6 +320,9 @@
                         </div>
                     </div>
 
+                    <!-- Inline Summary Alert -->
+                    <div id="submit-order-alert" class="hidden my-2"></div>
+
                     <button type="button" id="place-order-btn" onclick="submitOrder()"
                             ${userAddresses.length === 0 ? 'disabled' : ''}
                             class="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white text-sm font-bold rounded-md shadow-sm transition-colors">
@@ -336,6 +344,10 @@
     // ── Mount Stripe Card Element ──────────────────────────────────────────
     function mountStripeElement() {
         if (!stripeInstance) return;
+        if (cardElement) {
+            try { cardElement.unmount(); cardElement.destroy(); } catch(e) {}
+            cardElement = null;
+        }
         const elements  = stripeInstance.elements();
         cardElement     = elements.create('card', {
             style: {
@@ -351,15 +363,165 @@
         });
         cardElement.mount('#stripe-card-element');
         cardElement.on('change', function(e) {
+            clearPaymentErrors();
             const errDiv = document.getElementById('card-errors');
             if (e.error) {
-                errDiv.textContent = e.error.message;
-                errDiv.classList.remove('hidden');
+                const cardBox = document.getElementById('stripe-card-element');
+                if (cardBox) cardBox.classList.add('border-red-500', 'ring-2', 'ring-red-200');
+                if (errDiv) {
+                    errDiv.innerHTML = `
+                        <div class="flex items-start gap-2 p-2.5 bg-red-50 border border-red-200 rounded-lg text-red-700 text-xs font-medium">
+                            <span class="text-sm leading-none">⚠️</span>
+                            <div>${e.error.message}</div>
+                        </div>
+                    `;
+                    errDiv.classList.remove('hidden');
+                }
             } else {
-                errDiv.textContent = '';
-                errDiv.classList.add('hidden');
+                if (errDiv) {
+                    errDiv.innerHTML = '';
+                    errDiv.classList.add('hidden');
+                }
             }
         });
+    }
+
+    // ── Format friendly Stripe error messages ──────────────────────────────
+    function formatPaymentError(error) {
+        if (!error) return 'Payment could not be processed. Please try again.';
+        if (typeof error === 'string') return error;
+
+        const declineCode = (error.decline_code || error.code || '').toLowerCase();
+        const msg = (error.message || '').toLowerCase();
+
+        if (declineCode === 'insufficient_funds' || msg.includes('insufficient') || msg.includes('balance') || msg.includes('funds')) {
+            return '⚠️ Insufficient Balance: Your card does not have sufficient funds to complete this transaction. Please use another card or select another payment method (such as Cash on Delivery or Bank Transfer).';
+        }
+        if (declineCode === 'card_declined' || msg.includes('declined')) {
+            return '❌ Card Declined: Your card issuer or bank declined this payment. Please check your card details, contact your bank, or try another card.';
+        }
+        if (declineCode === 'expired_card' || msg.includes('expired')) {
+            return '❌ Card Expired: The expiration date provided has passed. Please check the card date or try a different card.';
+        }
+        if (declineCode === 'incorrect_cvc' || msg.includes('security code') || msg.includes('cvc') || msg.includes('cvv')) {
+            return '❌ Incorrect Security Code (CVC): The security code entered is incorrect. Please check the back of your card.';
+        }
+        if (declineCode === 'processing_error' || msg.includes('processing error')) {
+            return '⚠️ Processing Error: The payment network experienced an issue. Please wait a moment and try again.';
+        }
+
+        return error.message || 'Payment failed. Please check your card details and try again.';
+    }
+
+    // ── Display payment error prominently on screen ─────────────────────────
+    function showPaymentError(errorMessage, isCardField = true) {
+        const formatted = formatPaymentError(errorMessage);
+
+        // 1. Inline below card element
+        const cardErrDiv = document.getElementById('card-errors');
+        if (cardErrDiv) {
+            cardErrDiv.innerHTML = `
+                <div class="flex items-start gap-2 p-3 bg-red-50 border border-red-300 rounded-lg text-red-800 text-xs font-semibold shadow-sm animate-pulse">
+                    <span class="text-base leading-none">⚠️</span>
+                    <div class="flex-1">${formatted}</div>
+                </div>
+            `;
+            cardErrDiv.classList.remove('hidden');
+        }
+
+        // 2. Red border around card element
+        const cardBox = document.getElementById('stripe-card-element');
+        if (cardBox && isCardField) {
+            cardBox.classList.add('border-red-500', 'ring-2', 'ring-red-200');
+        }
+
+        // 3. Banner inside card panel
+        const cardPanelAlert = document.getElementById('card-panel-alert');
+        if (cardPanelAlert) {
+            cardPanelAlert.innerHTML = `
+                <div class="p-3.5 bg-red-50 border-l-4 border-red-600 text-red-900 rounded-r text-xs font-semibold flex items-center justify-between shadow-sm">
+                    <div class="flex items-center gap-2">
+                        <span>⚠️</span>
+                        <span>${formatted}</span>
+                    </div>
+                    <button type="button" onclick="this.parentElement.remove()" class="ml-3 font-bold opacity-60 hover:opacity-100 text-base">&times;</button>
+                </div>
+            `;
+            cardPanelAlert.classList.remove('hidden');
+        }
+
+        // 4. Banner in summary next to Place Order button
+        const summaryAlert = document.getElementById('submit-order-alert');
+        if (summaryAlert) {
+            summaryAlert.innerHTML = `
+                <div class="p-3 bg-red-50 border border-red-200 text-red-800 rounded-lg text-xs font-semibold">
+                    ${formatted}
+                </div>
+            `;
+            summaryAlert.classList.remove('hidden');
+        }
+
+        // 5. Top level alert
+        showAlert('checkout-alert', formatted, 'danger');
+
+        // 6. Smoothly scroll directly to the error
+        const scrollTarget = document.getElementById('card-panel-alert') || document.getElementById('card-errors') || document.getElementById('submit-order-alert');
+        if (scrollTarget) {
+            scrollTarget.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    }
+
+    // ── Clear all payment errors ───────────────────────────────────────────
+    function clearPaymentErrors() {
+        const cardErrDiv = document.getElementById('card-errors');
+        if (cardErrDiv) {
+            cardErrDiv.innerHTML = '';
+            cardErrDiv.classList.add('hidden');
+        }
+        const cardBox = document.getElementById('stripe-card-element');
+        if (cardBox) {
+            cardBox.classList.remove('border-red-500', 'ring-2', 'ring-red-200');
+        }
+        const cardPanelAlert = document.getElementById('card-panel-alert');
+        if (cardPanelAlert) {
+            cardPanelAlert.innerHTML = '';
+            cardPanelAlert.classList.add('hidden');
+        }
+        const summaryAlert = document.getElementById('submit-order-alert');
+        if (summaryAlert) {
+            summaryAlert.innerHTML = '';
+            summaryAlert.classList.add('hidden');
+        }
+        const nameInput = document.getElementById('cardholder-name');
+        if (nameInput) {
+            nameInput.classList.remove('border-red-500', 'ring-2', 'ring-red-200');
+        }
+        const nameErr = document.getElementById('cardholder-name-error');
+        if (nameErr) {
+            nameErr.innerHTML = '';
+            nameErr.classList.add('hidden');
+        }
+    }
+
+    // ── Show Success Modal ────────────────────────────────────────────────
+    function showPaymentSuccessModal(orderId) {
+        const modal = document.createElement('div');
+        modal.id = 'payment-success-modal';
+        modal.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4';
+        modal.innerHTML = `
+            <div class="bg-white rounded-2xl p-8 max-w-md w-full text-center shadow-2xl border border-green-100 transform transition-all scale-100 space-y-4">
+                <div class="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto text-3xl font-black shadow-inner animate-pulse">
+                    ✓
+                </div>
+                <h3 class="text-xl font-extrabold text-gray-900">Payment Confirmed!</h3>
+                <p class="text-sm text-gray-600">Your payment has been successfully processed and order <strong>#${orderId}</strong> is confirmed.</p>
+                <div class="inline-flex items-center text-xs font-semibold text-indigo-600 gap-2">
+                    <span class="w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></span>
+                    Redirecting to your order summary...
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
     }
 
     // ── Payment method change ──────────────────────────────────────────────
@@ -442,16 +604,18 @@
 
     // ── Place Order (main handler) ─────────────────────────────────────────
     async function submitOrder() {
+        clearPaymentErrors();
+
         const addrInput = document.querySelector('input[name="selected_address"]:checked');
         if (!addrInput) {
-            showAlert('checkout-alert', 'Please select or add a shipping address.', 'danger');
+            showPaymentError('Please select or add a delivery address before proceeding.', false);
             return;
         }
 
         const emailInput = document.getElementById('customer-email');
         const customerEmail = emailInput?.value?.trim() || getAuthUser()?.email;
         if (!customerEmail || !customerEmail.includes('@')) {
-            showAlert('checkout-alert', 'Please provide a valid order notification email address.', 'danger');
+            showPaymentError('Please provide a valid order notification email address.', false);
             return;
         }
 
@@ -471,22 +635,39 @@
             }
         } catch (err) {
             btn.disabled    = false;
-            onPaymentMethodChange(); // restore button label
-            showAlert('checkout-alert', err.message || 'An unexpected error occurred.', 'danger');
+            const method = getSelectedPaymentMethod();
+            if (method === 'card')               btn.textContent = 'Pay & Place Order';
+            else if (method === 'bank_transfer') btn.textContent = 'Submit Transfer & Place Order';
+            else                                 btn.textContent = 'Place Order (Pay on Delivery)';
+
+            showPaymentError(err.message || 'An unexpected error occurred.', method === 'card');
         }
     }
 
     // ── Card Checkout ──────────────────────────────────────────────────────
     async function handleCardCheckout(addrInput, btn, customerEmail) {
+        clearPaymentErrors();
+
         if (!stripeInstance || !cardElement) {
+            showPaymentError('Payment system unavailable. Please refresh the page and try again.', false);
             throw new Error('Payment system unavailable. Please refresh and try again.');
         }
 
-        const cardholderName = document.getElementById('cardholder-name')?.value?.trim();
+        const cardholderInput = document.getElementById('cardholder-name');
+        const cardholderName  = cardholderInput?.value?.trim();
         if (!cardholderName) {
             btn.disabled    = false;
             btn.textContent = 'Pay & Place Order';
-            showAlert('checkout-alert', 'Please enter the cardholder name.', 'danger');
+            if (cardholderInput) {
+                cardholderInput.classList.add('border-red-500', 'ring-2', 'ring-red-200');
+                cardholderInput.focus();
+            }
+            const nameErr = document.getElementById('cardholder-name-error');
+            if (nameErr) {
+                nameErr.textContent = 'Please enter the cardholder full name.';
+                nameErr.classList.remove('hidden');
+            }
+            showPaymentError('Please enter the cardholder full name as it appears on the card.', false);
             return;
         }
 
@@ -504,7 +685,9 @@
             });
 
             if (!intentRes.ok) {
-                throw new Error(intentRes.data?.message || 'Failed to initialise payment.');
+                const msg = intentRes.data?.message || 'Failed to initialise payment.';
+                showPaymentError(msg, false);
+                throw new Error(msg);
             }
 
             currentPaymentIntentClientSecret = intentRes.data.client_secret;
@@ -512,7 +695,7 @@
         }
 
         // Step 2: Confirm the card payment via Stripe.js
-        btn.textContent = '🔐 Verifying card...';
+        btn.textContent = '🔐 Verifying card & balance...';
         document.getElementById('card-processing-status').classList.remove('hidden');
 
         const { paymentIntent, error } = await stripeInstance.confirmCardPayment(
@@ -530,21 +713,23 @@
         if (error) {
             btn.disabled    = false;
             btn.textContent = 'Pay & Place Order';
-            // Reset so next attempt creates a fresh PaymentIntent
+            // Reset intent so next attempt creates a fresh PaymentIntent
             currentPaymentIntentClientSecret = null;
             currentPaymentIntentId           = null;
-            showAlert('checkout-alert', error.message || 'Card payment failed. Please try again.', 'danger');
+
+            showPaymentError(error, true);
             return;
         }
 
-        if (paymentIntent.status !== 'succeeded') {
+        if (!paymentIntent || paymentIntent.status !== 'succeeded') {
             btn.disabled    = false;
             btn.textContent = 'Pay & Place Order';
-            throw new Error('Payment not completed. Please try again.');
+            showPaymentError('Payment was not completed. Please check your card balance and try again.', true);
+            return;
         }
 
         // Step 3: Create the order, referencing the confirmed PaymentIntent
-        btn.textContent = '⟳ Creating your order...';
+        btn.textContent = '⟳ Confirming order...';
 
         const orderRes = await apiFetch('/api/orders', {
             method: 'POST',
@@ -557,15 +742,20 @@
             })
         });
 
-        btn.disabled    = false;
-        btn.textContent = 'Pay & Place Order';
-
         if (orderRes.ok && orderRes.data?.data?.id) {
+            btn.textContent = '✓ Payment Confirmed!';
+            btn.classList.remove('bg-indigo-600', 'hover:bg-indigo-700');
+            btn.classList.add('bg-green-600', 'hover:bg-green-700');
+
             fetchNavbarCounts();
-            showAlert('checkout-alert', '✓ Payment successful! Order confirmed. Redirecting...', 'success');
-            setTimeout(() => window.location.href = `/orders/${orderRes.data.data.id}`, 900);
+            showPaymentSuccessModal(orderRes.data.data.id);
+            setTimeout(() => window.location.href = `/orders/${orderRes.data.data.id}`, 1400);
         } else {
-            throw new Error(orderRes.data?.message || 'Order creation failed after payment. Please contact support.');
+            btn.disabled    = false;
+            btn.textContent = 'Pay & Place Order';
+            const failMsg = orderRes.data?.message || 'Order creation failed after payment. Please contact support.';
+            showPaymentError(failMsg, false);
+            throw new Error(failMsg);
         }
     }
 
