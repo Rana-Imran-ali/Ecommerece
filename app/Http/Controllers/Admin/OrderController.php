@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\CouponUsage;
 use App\Models\InventoryLog;
 use App\Models\Order;
+use App\Models\ProductVariant;
 use App\Observers\OrderObserver;
 use Illuminate\Http\Request;
 
@@ -54,21 +56,39 @@ class OrderController extends Controller
         if ($newStatus === 'cancelled' && $oldStatus !== 'cancelled') {
             $order->payments()->where('status', 'pending')->update(['status' => 'cancelled']);
 
+            // Restore coupon usage if order is cancelled
+            CouponUsage::where('order_id', $order->id)->delete();
+
             foreach ($order->items as $item) {
                 $product = $item->product;
+                $variant = null;
+                $variantBefore = null;
+                $variantAfter = null;
+
+                if ($item->product_variant_id) {
+                    $variant = ProductVariant::where('id', $item->product_variant_id)->first();
+                    if ($variant) {
+                        $variantBefore = (int) $variant->stock;
+                        $variantAfter  = $variantBefore + $item->quantity;
+                        $variant->update(['stock' => $variantAfter]);
+                    }
+                }
+
                 if ($product) {
-                    $before = $product->stock;
+                    $before = (int) $product->stock;
                     $after = $before + $item->quantity;
                     $product->update(['stock' => $after]);
+
                     InventoryLog::create([
-                        'product_id' => $product->id,
-                        'user_id' => auth()->id(),
-                        'type' => 'return',
-                        'quantity' => $item->quantity,
-                        'quantity_before' => $before,
-                        'quantity_after' => $after,
-                        'reference_id' => $order->id,
-                        'notes' => "Stock returned due to order #{$order->id} cancellation",
+                        'product_id'         => $product->id,
+                        'product_variant_id' => $variant?->id,
+                        'user_id'            => auth()->id(),
+                        'type'               => 'return',
+                        'quantity'           => $item->quantity,
+                        'quantity_before'    => $variant ? $variantBefore : $before,
+                        'quantity_after'     => $variant ? $variantAfter : $after,
+                        'reference_id'       => (string) $order->id,
+                        'notes'              => "Stock returned due to order #{$order->id} cancellation by admin" . ($item->variant_name ? " ({$item->variant_name})" : ''),
                     ]);
                 }
             }

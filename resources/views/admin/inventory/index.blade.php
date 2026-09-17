@@ -7,20 +7,32 @@
     <!-- Adjust Stock Form -->
     <div class="card">
         <div class="card-title mb-16">Manual Stock Adjustment</div>
-        <form method="POST" action="{{ route('admin.inventory.adjust') }}">
+        <form method="POST" action="{{ route('admin.inventory.adjust') }}" id="inventory-adjust-form">
             @csrf
             <div class="form-group">
                 <label>Product *</label>
-                <select name="product_id" class="form-control" required>
+                <select name="product_id" id="inventory-product" class="form-control" required onchange="loadVariants(this)">
                     <option value="">Select product…</option>
                     @foreach($products as $product)
-                        <option value="{{ $product->id }}" {{ old('product_id') == $product->id ? 'selected' : '' }}>
+                        <option value="{{ $product->id }}"
+                                data-variants="{{ $product->variants->map(fn($v) => ['id'=>$v->id,'sku'=>$v->sku,'stock'=>$v->stock,'title'=>$v->sku])->toJson() }}"
+                                {{ old('product_id') == $product->id ? 'selected' : '' }}>
                             {{ $product->name }}
                         </option>
                     @endforeach
                 </select>
                 @error('product_id')<div class="form-error">{{ $message }}</div>@enderror
             </div>
+
+            <!-- Variant Selector (shown only when product has variants) -->
+            <div class="form-group" id="variant-group" style="display:none">
+                <label>Variant <span style="font-weight:400;color:var(--muted)">(optional – leave blank to adjust base product stock)</span></label>
+                <select name="product_variant_id" id="inventory-variant" class="form-control">
+                    <option value="">— Base Product Stock —</option>
+                </select>
+                @error('product_variant_id')<div class="form-error">{{ $message }}</div>@enderror
+            </div>
+
             <div class="form-row">
                 <div class="form-group">
                     <label>Type *</label>
@@ -88,13 +100,14 @@
     <div class="table-wrap">
         <table>
             <thead>
-                <tr><th>Date</th><th>Product</th><th>Type</th><th>Qty</th><th>Before</th><th>After</th><th>By</th><th>Notes</th><th>Ref #</th></tr>
+                <tr><th>Date</th><th>Product</th><th>Variant</th><th>Type</th><th>Qty</th><th>Before</th><th>After</th><th>By</th><th>Notes</th><th>Ref #</th></tr>
             </thead>
             <tbody>
                 @forelse($logs as $log)
                 <tr>
                     <td class="text-sm text-muted">{{ $log->created_at->format('M d, Y H:i') }}</td>
                     <td><strong>{{ $log->product?->name ?? '—' }}</strong></td>
+                    <td class="text-sm text-muted">{{ $log->variant?->sku ?? '—' }}</td>
                     <td>
                         @php
                             $badgeCls = match(true) {
@@ -114,7 +127,7 @@
                     <td class="text-sm">{{ $log->reference_id ? "#$log->reference_id" : '—' }}</td>
                 </tr>
                 @empty
-                <tr><td colspan="9" style="text-align:center;padding:32px;color:var(--muted)">No inventory records yet.</td></tr>
+                <tr><td colspan="10" style="text-align:center;padding:32px;color:var(--muted)">No inventory records yet.</td></tr>
                 @endforelse
             </tbody>
         </table>
@@ -122,4 +135,32 @@
 
     <div class="pagination">{{ $logs->links() }}</div>
 </div>
+
+@push('scripts')
+<script>
+function loadVariants(selectEl) {
+    const variantGroup   = document.getElementById('variant-group');
+    const variantSelect  = document.getElementById('inventory-variant');
+    const selectedOption = selectEl.options[selectEl.selectedIndex];
+    let variants = [];
+
+    try { variants = JSON.parse(selectedOption.dataset.variants || '[]'); } catch(e) {}
+
+    // Reset variant dropdown
+    variantSelect.innerHTML = '<option value="">— Base Product Stock —</option>';
+
+    if (variants.length > 0) {
+        variants.forEach(function(v) {
+            const opt = document.createElement('option');
+            opt.value       = v.id;
+            opt.textContent = v.sku + ' (Stock: ' + v.stock + ')';
+            variantSelect.appendChild(opt);
+        });
+        variantGroup.style.display = '';
+    } else {
+        variantGroup.style.display = 'none';
+    }
+}
+</script>
+@endpush
 @endsection

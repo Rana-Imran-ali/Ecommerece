@@ -259,6 +259,9 @@
                 <div class="bg-white p-6 rounded-lg border border-gray-200 space-y-3">
                     <div class="flex items-center justify-between">
                         <h2 class="text-base font-bold text-gray-900">3. Promo Code / Coupon <span class="ml-1 text-xs font-normal text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">Optional</span></h2>
+                        <button type="button" onclick="openCouponsModal()" class="text-xs text-indigo-600 font-semibold hover:underline flex items-center gap-1">
+                            🏷️ View Available Coupons
+                        </button>
                     </div>
                     <div class="flex items-center space-x-2">
                         <input type="text" id="coupon-code-input"
@@ -280,6 +283,25 @@
                             ? `<span class="text-green-600 font-medium">✓ Coupon "${appliedCoupon.code}" applied! Saved $${parseFloat(appliedCoupon.discount_amount).toFixed(2)}</span>`
                             : '<span class="text-gray-400">Skip this field if you don\'t have a coupon code.</span>'
                         }
+                    </div>
+                </div>
+
+                <!-- Available Coupons Modal -->
+                <div id="coupons-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+                    <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[80vh] flex flex-col">
+                        <div class="flex items-center justify-between p-5 border-b border-gray-100">
+                            <h3 class="text-base font-bold text-gray-900">🏷️ Available Coupons</h3>
+                            <button type="button" onclick="closeCouponsModal()" class="text-gray-400 hover:text-gray-700 text-xl font-bold leading-none">&times;</button>
+                        </div>
+                        <div id="coupons-modal-body" class="overflow-y-auto p-5 space-y-3 flex-1">
+                            <div class="text-center text-sm text-gray-400 py-8">
+                                <div class="inline-block animate-spin w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full mb-2"></div>
+                                <div>Loading coupons…</div>
+                            </div>
+                        </div>
+                        <div class="p-4 border-t border-gray-100 text-xs text-gray-400 text-center">
+                            Click any coupon to apply it instantly.
+                        </div>
                     </div>
                 </div>
             </div>
@@ -822,5 +844,83 @@
     }
 
     document.addEventListener('DOMContentLoaded', initCheckout);
+
+    // ── Available Coupons Modal ────────────────────────────────────────────
+    async function openCouponsModal() {
+        const modal = document.getElementById('coupons-modal');
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+
+        const body = document.getElementById('coupons-modal-body');
+        body.innerHTML = `
+            <div class="text-center text-sm text-gray-400 py-8">
+                <div class="inline-block animate-spin w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full mb-2"></div>
+                <div>Loading coupons…</div>
+            </div>
+        `;
+
+        try {
+            const res = await apiFetch('/api/coupons');
+            const coupons = res.data?.data || [];
+
+            if (!coupons.length) {
+                body.innerHTML = `<div class="text-center text-sm text-gray-400 py-8">No active coupons available right now.</div>`;
+                return;
+            }
+
+            const subtotal = parseFloat(checkoutCart?.subtotal || 0);
+
+            body.innerHTML = coupons.map(c => {
+                const minOrder    = parseFloat(c.min_order_amount || 0);
+                const eligible    = subtotal >= minOrder;
+                const discount    = c.discount_type === 'percent'
+                    ? `${parseFloat(c.discount_percent || 0).toFixed(0)}% OFF`
+                    : `$${parseFloat(c.discount_amount || 0).toFixed(2)} OFF`;
+                const expiry      = c.expires_at ? `Expires ${new Date(c.expires_at).toLocaleDateString()}` : 'No expiry';
+                const minNote     = minOrder > 0 ? `Min. order $${minOrder.toFixed(2)}` : 'No minimum';
+                const usageLeft   = (c.max_uses != null && c.used_count != null)
+                    ? `${c.max_uses - c.used_count} uses left`
+                    : '';
+
+                return `
+                    <button type="button"
+                            onclick="selectCoupon('${c.code}')"
+                            ${!eligible ? 'disabled title="Minimum order not met"' : ''}
+                            class="w-full text-left p-4 rounded-xl border-2 ${eligible ? 'border-indigo-200 hover:border-indigo-500 hover:bg-indigo-50/30 cursor-pointer' : 'border-gray-100 bg-gray-50 opacity-50 cursor-not-allowed'} transition-all">
+                        <div class="flex items-center justify-between mb-1">
+                            <span class="font-mono font-bold text-gray-800 text-sm">${c.code}</span>
+                            <span class="text-xs font-bold px-2 py-0.5 rounded-full ${eligible ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}">${discount}</span>
+                        </div>
+                        <div class="text-xs text-gray-500 flex flex-wrap gap-2">
+                            <span>${minNote}</span>
+                            ${usageLeft ? `<span>·</span><span>${usageLeft}</span>` : ''}
+                            <span>·</span><span>${expiry}</span>
+                        </div>
+                    </button>
+                `;
+            }).join('');
+        } catch(e) {
+            body.innerHTML = `<div class="text-center text-sm text-red-500 py-8">Failed to load coupons. Please try again.</div>`;
+        }
+    }
+
+    function closeCouponsModal() {
+        const modal = document.getElementById('coupons-modal');
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
+
+    async function selectCoupon(code) {
+        closeCouponsModal();
+        const inp = document.getElementById('coupon-code-input');
+        if (inp) inp.value = code;
+        await applyCoupon();
+    }
+
+    // Close modal on backdrop click
+    document.addEventListener('click', function(e) {
+        const modal = document.getElementById('coupons-modal');
+        if (modal && e.target === modal) closeCouponsModal();
+    });
 </script>
 @endpush

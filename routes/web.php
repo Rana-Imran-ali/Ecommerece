@@ -66,7 +66,9 @@ Route::view('/cart', 'cart.index')->name('cart.index');
 Route::view('/checkout', 'checkout.index')->name('checkout.index');
 Route::view('/wishlist', 'wishlist.index')->name('wishlist.index');
 Route::view('/addresses', 'addresses.index')->name('addresses.index');
-Route::view('/profile', 'profile.index')->name('profile.edit');
+Route::get('/profile', function () {
+    return redirect()->to('/account#profile');
+})->name('profile.edit');
 
 // Dashboard redirect bridge (redirects admin to admin dashboard, customer to My Account)
 Route::get('/dashboard', function () {

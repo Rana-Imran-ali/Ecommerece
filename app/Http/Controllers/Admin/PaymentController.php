@@ -7,6 +7,7 @@ use App\Models\CouponUsage;
 use App\Models\InventoryLog;
 use App\Models\Payment;
 use App\Models\Product;
+use App\Models\ProductVariant;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -128,20 +129,34 @@ class PaymentController extends Controller
                     // Restore inventory stock and record inventory logs
                     foreach ($order->items as $item) {
                         $product = Product::where('id', $item->product_id)->lockForUpdate()->first();
+                        $variant = null;
+                        $variantBefore = null;
+                        $variantAfter = null;
+
+                        if ($item->product_variant_id) {
+                            $variant = ProductVariant::where('id', $item->product_variant_id)->lockForUpdate()->first();
+                            if ($variant) {
+                                $variantBefore = (int) $variant->stock;
+                                $variantAfter  = $variantBefore + $item->quantity;
+                                $variant->update(['stock' => $variantAfter]);
+                            }
+                        }
+
                         if ($product) {
                             $before = (int) $product->stock;
                             $after  = $before + $item->quantity;
                             $product->update(['stock' => $after]);
 
                             InventoryLog::create([
-                                'product_id'      => $product->id,
-                                'user_id'         => auth()->id() ?? $order->user_id,
-                                'type'            => 'return',
-                                'quantity'        => $item->quantity,
-                                'quantity_before' => $before,
-                                'quantity_after'  => $after,
-                                'reference_id'    => (string) $order->id,
-                                'notes'           => "Stock restored due to payment {$newStatus} for order #{$order->id}",
+                                'product_id'         => $product->id,
+                                'product_variant_id' => $variant?->id,
+                                'user_id'            => auth()->id() ?? $order->user_id,
+                                'type'               => 'return',
+                                'quantity'           => $item->quantity,
+                                'quantity_before'    => $variant ? $variantBefore : $before,
+                                'quantity_after'     => $variant ? $variantAfter : $after,
+                                'reference_id'       => (string) $order->id,
+                                'notes'              => "Stock restored due to payment {$newStatus} for order #{$order->id}" . ($item->variant_name ? " ({$item->variant_name})" : ''),
                             ]);
                         }
                     }

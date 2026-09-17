@@ -19,7 +19,7 @@ class WishlistController extends Controller
         $wishlist = Wishlist::firstOrCreate(['user_id' => $request->user()->id]);
 
         $items = WishlistItem::where('wishlist_id', $wishlist->id)
-            ->with(['product.primaryImage', 'product.category'])
+            ->with(['product.primaryImage', 'product.category', 'variant.optionValues.option'])
             ->latest('id')
             ->get();
 
@@ -39,15 +39,17 @@ class WishlistController extends Controller
     public function add(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'product_id' => ['required', 'integer', 'exists:products,id'],
+            'product_id'         => ['required', 'integer', 'exists:products,id'],
+            'product_variant_id' => ['nullable', 'integer', 'exists:product_variants,id'],
         ]);
 
         $product = Product::findOrFail($validated['product_id']);
         $wishlist = Wishlist::firstOrCreate(['user_id' => $request->user()->id]);
 
         $item = WishlistItem::firstOrCreate([
-            'wishlist_id' => $wishlist->id,
-            'product_id' => $product->id,
+            'wishlist_id'        => $wishlist->id,
+            'product_id'         => $product->id,
+            'product_variant_id' => $validated['product_variant_id'] ?? null,
         ]);
 
         $item->load(['product.primaryImage']);

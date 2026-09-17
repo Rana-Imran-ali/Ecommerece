@@ -93,5 +93,13 @@ class Product extends Model
     {
         return $this->hasMany(ProductVariant::class);
     }
+
+    /**
+     * Get only approved reviews for the product (for public display).
+     */
+    public function approvedReviews(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(Review::class)->where('status', 'approved');
+    }
 }
 
