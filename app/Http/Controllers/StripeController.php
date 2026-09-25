@@ -11,6 +11,7 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Payment;
 use App\Models\Product;
+use App\Models\ProductVariant;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -203,7 +204,7 @@ class StripeController extends Controller
 
         // ── 2. Load cart ───────────────────────────────────────────────────
         $cart = Cart::where('user_id', $user->id)
-            ->with(['items.product'])
+            ->with(['items.product', 'items.variant.optionValues.option'])
             ->first();
 
         if (!$cart || $cart->items->isEmpty()) {
@@ -222,16 +223,19 @@ class StripeController extends Controller
                 ], Response::HTTP_UNPROCESSABLE_ENTITY);
             }
 
-            if ($item->product->stock < $item->quantity) {
+            $availableStock = $item->variant ? (int) $item->variant->stock : (int) $item->product->stock;
+            $itemName = $item->variant ? "{$item->product->name} ({$item->variant->title})" : $item->product->name;
+
+            if ($availableStock < $item->quantity) {
                 return response()->json([
                     'success' => false,
-                    'message' => "Insufficient stock for '{$item->product->name}'. Available: {$item->product->stock}, Requested: {$item->quantity}.",
+                    'message' => "Insufficient stock for '{$itemName}'. Available: {$availableStock}, Requested: {$item->quantity}.",
                 ], Response::HTTP_UNPROCESSABLE_ENTITY);
             }
         }
 
         // ── 4. Calculate totals ────────────────────────────────────────────
-        $subtotal = $cart->items->sum(fn ($item) => (float) $item->product->price * $item->quantity);
+        $subtotal = $cart->items->sum(fn ($item) => ($item->variant ? $item->variant->effective_price : (float) $item->product->price) * $item->quantity);
 
         $coupon         = null;
         $discountAmount = 0.0;
@@ -290,6 +294,14 @@ class StripeController extends Controller
                     'user_id'                => $user->id,
                     'customer_email'         => $customerEmail,
                     'address_id'             => $address->id,
+                    'shipping_name'          => $address->name,
+                    'shipping_phone'         => $address->phone,
+                    'shipping_address_line1' => $address->address_line1,
+                    'shipping_address_line2' => $address->address_line2,
+                    'shipping_city'          => $address->city,
+                    'shipping_state'         => $address->state,
+                    'shipping_postal_code'   => $address->postal_code,
+                    'shipping_country'       => $address->country,
                     'status'                 => 'pending',
                     'expected_delivery_date' => $expectedDeliveryDate,
                     'total_amount'           => $totalAmount,
@@ -297,31 +309,53 @@ class StripeController extends Controller
 
                 foreach ($cart->items as $cartItem) {
                     $product = Product::where('id', $cartItem->product_id)->lockForUpdate()->first();
-                    if (!$product || $product->stock < $cartItem->quantity) {
-                        throw new \RuntimeException("Insufficient stock for '{$cartItem->product->name}'. Available: " . ($product->stock ?? 0));
+                    $variant = null;
+                    $itemPrice = (float) ($product ? $product->price : 0);
+                    $variantName = null;
+                    $variantBeforeStock = null;
+                    $variantAfterStock = null;
+
+                    if ($cartItem->product_variant_id) {
+                        $variant = ProductVariant::where('id', $cartItem->product_variant_id)->lockForUpdate()->first();
+                        if (!$variant || $variant->stock < $cartItem->quantity) {
+                            $varTitle = $cartItem->variant?->title ?? 'Variant';
+                            throw new \RuntimeException("Insufficient stock for '{$cartItem->product->name} ({$varTitle})'. Available: " . ($variant->stock ?? 0));
+                        }
+                        $itemPrice = $variant->effective_price;
+                        $variantName = $variant->title;
+                        $variantBeforeStock = (int) $variant->stock;
+                        $variantAfterStock  = $variantBeforeStock - $cartItem->quantity;
+                        $variant->update(['stock' => $variantAfterStock]);
+                    } else {
+                        if (!$product || $product->stock < $cartItem->quantity) {
+                            throw new \RuntimeException("Insufficient stock for '{$cartItem->product->name}'. Available: " . ($product->stock ?? 0));
+                        }
                     }
 
                     $beforeStock = (int) $product->stock;
-                    $afterStock  = $beforeStock - $cartItem->quantity;
+                    $afterStock  = max(0, $beforeStock - $cartItem->quantity);
                     $product->update(['stock' => $afterStock]);
 
                     OrderItem::create([
-                        'order_id'     => $order->id,
-                        'product_id'   => $cartItem->product_id,
-                        'product_name' => $product->name,
-                        'quantity'     => $cartItem->quantity,
-                        'price'        => (float) $product->price,
+                        'order_id'           => $order->id,
+                        'product_id'         => $cartItem->product_id,
+                        'product_variant_id' => $variant?->id,
+                        'product_name'       => $product->name,
+                        'variant_name'       => $variantName,
+                        'quantity'           => $cartItem->quantity,
+                        'price'              => $itemPrice,
                     ]);
 
                     InventoryLog::create([
-                        'product_id'      => $product->id,
-                        'user_id'         => $user->id,
-                        'type'            => 'sale',
-                        'quantity'        => -$cartItem->quantity,
-                        'quantity_before' => $beforeStock,
-                        'quantity_after'  => $afterStock,
-                        'reference_id'    => (string) $order->id,
-                        'notes'           => "Pending card checkout for order #{$order->id}",
+                        'product_id'         => $product->id,
+                        'product_variant_id' => $variant?->id,
+                        'user_id'            => $user->id,
+                        'type'               => 'sale',
+                        'quantity'           => -$cartItem->quantity,
+                        'quantity_before'    => $variant ? $variantBeforeStock : $beforeStock,
+                        'quantity_after'     => $variant ? $variantAfterStock : $afterStock,
+                        'reference_id'       => (string) $order->id,
+                        'notes'              => "Pending card checkout for order #{$order->id}" . ($variantName ? " ({$variantName})" : ''),
                     ]);
                 }
 
@@ -583,7 +617,7 @@ class StripeController extends Controller
         }
 
         $address = Address::where('id', $addressId)->where('user_id', $userId)->first();
-        $cart    = Cart::where('user_id', $userId)->with(['items.product', 'user'])->first();
+        $cart    = Cart::where('user_id', $userId)->with(['items.product', 'items.variant.optionValues.option', 'user'])->first();
 
         if (!$address || !$cart || $cart->items->isEmpty()) {
             $this->refundPaymentIntent($paymentIntentId, 'Cart empty or address missing on webhook fulfillment');
@@ -592,14 +626,19 @@ class StripeController extends Controller
 
         // Check stock availability
         foreach ($cart->items as $cartItem) {
-            if (!$cartItem->product || $cartItem->product->stock < $cartItem->quantity) {
+            if (!$cartItem->product) {
+                $this->refundPaymentIntent($paymentIntentId, 'Product no longer available on webhook fulfillment');
+                return;
+            }
+            $availableStock = $cartItem->variant ? (int) $cartItem->variant->stock : (int) $cartItem->product->stock;
+            if ($availableStock < $cartItem->quantity) {
                 $this->refundPaymentIntent($paymentIntentId, 'Stock depleted before webhook fulfillment');
                 return;
             }
         }
 
         // Calculate totals
-        $subtotal       = $cart->items->sum(fn($i) => (float) $i->product->price * $i->quantity);
+        $subtotal       = $cart->items->sum(fn($i) => ($i->variant ? $i->variant->effective_price : (float) $i->product->price) * $i->quantity);
         $coupon         = null;
         $discountAmount = 0.0;
 
@@ -633,6 +672,14 @@ class StripeController extends Controller
                     'user_id'                => $userId,
                     'customer_email'         => $customerEmail ?: ($cart->user?->email ?? ''),
                     'address_id'             => $address->id,
+                    'shipping_name'          => $address->name,
+                    'shipping_phone'         => $address->phone,
+                    'shipping_address_line1' => $address->address_line1,
+                    'shipping_address_line2' => $address->address_line2,
+                    'shipping_city'          => $address->city,
+                    'shipping_state'         => $address->state,
+                    'shipping_postal_code'   => $address->postal_code,
+                    'shipping_country'       => $address->country,
                     'status'                 => 'processing',
                     'expected_delivery_date' => $expectedDeliveryDate,
                     'total_amount'           => $totalAmount,
@@ -640,27 +687,47 @@ class StripeController extends Controller
 
                 foreach ($cart->items as $cartItem) {
                     $product = Product::where('id', $cartItem->product_id)->lockForUpdate()->first();
+                    $variant = null;
+                    $itemPrice = (float) ($product ? $product->price : 0);
+                    $variantName = null;
+                    $variantBeforeStock = null;
+                    $variantAfterStock = null;
+
+                    if ($cartItem->product_variant_id) {
+                        $variant = ProductVariant::where('id', $cartItem->product_variant_id)->lockForUpdate()->first();
+                        if ($variant) {
+                            $itemPrice = $variant->effective_price;
+                            $variantName = $variant->title;
+                            $variantBeforeStock = (int) $variant->stock;
+                            $variantAfterStock  = max(0, $variantBeforeStock - $cartItem->quantity);
+                            $variant->update(['stock' => $variantAfterStock]);
+                        }
+                    }
+
                     $beforeStock = (int) $product->stock;
-                    $afterStock  = $beforeStock - $cartItem->quantity;
+                    $afterStock  = max(0, $beforeStock - $cartItem->quantity);
                     $product->update(['stock' => $afterStock]);
 
                     OrderItem::create([
-                        'order_id'     => $order->id,
-                        'product_id'   => $cartItem->product_id,
-                        'product_name' => $product->name,
-                        'quantity'     => $cartItem->quantity,
-                        'price'        => (float) $product->price,
+                        'order_id'           => $order->id,
+                        'product_id'         => $cartItem->product_id,
+                        'product_variant_id' => $variant?->id,
+                        'product_name'       => $product->name,
+                        'variant_name'       => $variantName,
+                        'quantity'           => $cartItem->quantity,
+                        'price'              => $itemPrice,
                     ]);
 
                     InventoryLog::create([
-                        'product_id'      => $product->id,
-                        'user_id'         => $userId,
-                        'type'            => 'sale',
-                        'quantity'        => -$cartItem->quantity,
-                        'quantity_before' => $beforeStock,
-                        'quantity_after'  => $afterStock,
-                        'reference_id'    => (string) $order->id,
-                        'notes'           => "Order #{$order->id} placed via Stripe payment_intent webhook",
+                        'product_id'         => $product->id,
+                        'product_variant_id' => $variant?->id,
+                        'user_id'            => $userId,
+                        'type'               => 'sale',
+                        'quantity'           => -$cartItem->quantity,
+                        'quantity_before'    => $variant ? $variantBeforeStock : $beforeStock,
+                        'quantity_after'     => $variant ? $variantAfterStock : $afterStock,
+                        'reference_id'       => (string) $order->id,
+                        'notes'              => "Order #{$order->id} placed via Stripe payment_intent webhook" . ($variantName ? " ({$variantName})" : ''),
                     ]);
                 }
 

@@ -192,8 +192,8 @@
         });
 
         if (res.ok) {
-            showAlert('order-detail-alert', 'Order cancelled successfully and product inventory restored.', 'success');
-            loadOrder();
+            showAlert('order-detail-alert', 'Order cancelled and deleted successfully. Stock restored. Redirecting...', 'success');
+            setTimeout(() => window.location.href = '/orders', 1200);
         } else {
             showAlert('order-detail-alert', res.data?.message || 'Failed to cancel order.', 'danger');
         }

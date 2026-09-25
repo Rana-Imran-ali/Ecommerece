@@ -59,7 +59,11 @@ class FrontendApiIntegrationTest extends TestCase
 
         foreach ($routes as $route) {
             $response = $this->get($route);
-            $response->assertOk();
+            if ($route === '/profile') {
+                $response->assertRedirect('/account#profile');
+            } else {
+                $response->assertOk();
+            }
         }
     }
 

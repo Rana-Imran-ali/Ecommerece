@@ -6,9 +6,11 @@ use App\Http\Controllers\Controller;
 use App\Models\CouponUsage;
 use App\Models\InventoryLog;
 use App\Models\Order;
+use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Observers\OrderObserver;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class OrderController extends Controller
 {
@@ -51,48 +53,50 @@ class OrderController extends Controller
             $updateData['expected_delivery_date'] = $validated['expected_delivery_date'] ?: null;
         }
 
-        $order->update($updateData);
+        DB::transaction(function () use ($order, $updateData, $oldStatus, $newStatus) {
+            $order->update($updateData);
 
-        if ($newStatus === 'cancelled' && $oldStatus !== 'cancelled') {
-            $order->payments()->where('status', 'pending')->update(['status' => 'cancelled']);
+            if ($newStatus === 'cancelled' && $oldStatus !== 'cancelled') {
+                $order->payments()->where('status', 'pending')->update(['status' => 'cancelled']);
 
-            // Restore coupon usage if order is cancelled
-            CouponUsage::where('order_id', $order->id)->delete();
+                // Restore coupon usage if order is cancelled
+                CouponUsage::where('order_id', $order->id)->delete();
 
-            foreach ($order->items as $item) {
-                $product = $item->product;
-                $variant = null;
-                $variantBefore = null;
-                $variantAfter = null;
+                foreach ($order->items as $item) {
+                    $variant = null;
+                    $variantBefore = null;
+                    $variantAfter = null;
 
-                if ($item->product_variant_id) {
-                    $variant = ProductVariant::where('id', $item->product_variant_id)->first();
-                    if ($variant) {
-                        $variantBefore = (int) $variant->stock;
-                        $variantAfter  = $variantBefore + $item->quantity;
-                        $variant->update(['stock' => $variantAfter]);
+                    if ($item->product_variant_id) {
+                        $variant = ProductVariant::where('id', $item->product_variant_id)->lockForUpdate()->first();
+                        if ($variant) {
+                            $variantBefore = (int) $variant->stock;
+                            $variantAfter  = $variantBefore + $item->quantity;
+                            $variant->update(['stock' => $variantAfter]);
+                        }
+                    }
+
+                    $product = Product::where('id', $item->product_id)->lockForUpdate()->first();
+                    if ($product) {
+                        $before = (int) $product->stock;
+                        $after = $before + $item->quantity;
+                        $product->update(['stock' => $after]);
+
+                        InventoryLog::create([
+                            'product_id'         => $product->id,
+                            'product_variant_id' => $variant?->id,
+                            'user_id'            => auth()->id(),
+                            'type'               => 'return',
+                            'quantity'           => $item->quantity,
+                            'quantity_before'    => $variant ? $variantBefore : $before,
+                            'quantity_after'     => $variant ? $variantAfter : $after,
+                            'reference_id'       => (string) $order->id,
+                            'notes'              => "Stock returned due to order #{$order->id} cancellation by admin" . ($item->variant_name ? " ({$item->variant_name})" : ''),
+                        ]);
                     }
                 }
-
-                if ($product) {
-                    $before = (int) $product->stock;
-                    $after = $before + $item->quantity;
-                    $product->update(['stock' => $after]);
-
-                    InventoryLog::create([
-                        'product_id'         => $product->id,
-                        'product_variant_id' => $variant?->id,
-                        'user_id'            => auth()->id(),
-                        'type'               => 'return',
-                        'quantity'           => $item->quantity,
-                        'quantity_before'    => $variant ? $variantBefore : $before,
-                        'quantity_after'     => $variant ? $variantAfter : $after,
-                        'reference_id'       => (string) $order->id,
-                        'notes'              => "Stock returned due to order #{$order->id} cancellation by admin" . ($item->variant_name ? " ({$item->variant_name})" : ''),
-                    ]);
-                }
             }
-        }
+        });
 
         return back()->with('success', "Order #{$order->id} status updated to \"{$newStatus}\". Use the Email Controls below to notify the customer.");
     }

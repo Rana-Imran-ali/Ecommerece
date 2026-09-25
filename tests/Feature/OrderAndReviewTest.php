@@ -248,8 +248,8 @@ class OrderAndReviewTest extends TestCase
         $response = $this->withHeader('Authorization', "Bearer {$this->token1}")
             ->patchJson("/api/orders/{$order->id}/cancel");
 
-        $response->assertOk()
-            ->assertJsonPath('data.status', 'cancelled');
+        $response->assertOk();
+        $this->assertDatabaseMissing('orders', ['id' => $order->id]);
 
         // Stock restored from 15 to 20
         $this->assertEquals(20, $this->product->fresh()->stock);

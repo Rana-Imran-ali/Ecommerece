@@ -11,12 +11,8 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('product_images', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('product_id')->constrained()->cascadeOnDelete();
-            $table->string('image');
-            $table->boolean('is_primary')->default(false);
-            $table->timestamps();
+        Schema::table('coupon_usages', function (Blueprint $table) {
+            $table->unique(['coupon_id', 'order_id'], 'coupon_usages_coupon_order_unique');
         });
     }
 
@@ -25,7 +21,8 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('product_images');
+        Schema::table('coupon_usages', function (Blueprint $table) {
+            $table->dropUnique('coupon_usages_coupon_order_unique');
+        });
     }
-    
 };

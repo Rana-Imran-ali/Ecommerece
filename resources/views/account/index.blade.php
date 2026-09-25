@@ -811,9 +811,10 @@ async function cancelOrder(orderId) {
     if (!confirm('Cancel order #' + orderId + '? Stock will be restored.')) return;
     const res = await apiFetch('/api/orders/' + orderId + '/cancel', {method:'PATCH'});
     if (res.ok) {
-        showAlert('orders-alert', 'Order #' + orderId + ' cancelled and stock restored.', 'success');
+        showAlert('orders-alert', 'Order #' + orderId + ' cancelled and deleted from database.', 'success');
         loadOrders(ordersPage);
         loadUserData();
+        loadRecentOrders();
     } else {
         showAlert('orders-alert', res.data?.message || 'Could not cancel order.', 'danger');
     }

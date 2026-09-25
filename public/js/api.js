@@ -111,6 +111,8 @@ async function apiFetch(endpoint, options = {}) {
             clearClientCache('/categories');
         } else if (url.includes('/products')) {
             clearClientCache('/products');
+        } else if (url.includes('/orders')) {
+            clearClientCache('/orders');
         }
     }
 

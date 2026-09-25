@@ -9,7 +9,7 @@ test('profile page is displayed', function () {
         ->actingAs($user)
         ->get('/profile');
 
-    $response->assertOk();
+    $response->assertRedirect('/account#profile');
 });
 
 test('profile information can be updated', function () {

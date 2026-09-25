@@ -46,7 +46,7 @@ Route::prefix('categories')->group(function () {
 // Coupons (Public Validation & Listing)
 Route::prefix('coupons')->group(function () {
     Route::get('/', [CouponController::class, 'index'])->name('api.coupons.index');
-    Route::post('/validate', [CouponController::class, 'validateCoupon'])->name('api.coupons.validate');
+    Route::post('/validate', [CouponController::class, 'validateCoupon'])->middleware('throttle:30,1')->name('api.coupons.validate');
 });
 
 // WhatsApp Webhook (Public)
@@ -128,15 +128,18 @@ Route::middleware(ApiAuthMiddleware::class)->group(function () {
     // Orders & Checkout
     Route::prefix('orders')->group(function () {
         Route::get('/', [OrderController::class, 'index'])->name('api.orders.index');
-        Route::post('/', [OrderController::class, 'store'])->name('api.orders.store'); // COD / Bank Transfer checkout
+        Route::post('/', [OrderController::class, 'store'])->middleware('throttle:30,1')->name('api.orders.store'); // COD / Bank Transfer checkout
         Route::get('/{order}', [OrderController::class, 'show'])->name('api.orders.show');
         Route::patch('/{order}/cancel', [OrderController::class, 'cancel'])->name('api.orders.cancel');
     });
 
     // Stripe – Card Payment
     Route::post('/stripe/payment-intent', [StripeController::class, 'createPaymentIntent'])
+        ->middleware('throttle:30,1')
         ->name('api.stripe.payment-intent'); // Step 1: Create PaymentIntent, returns client_secret
     Route::post('/stripe/create-session', [StripeController::class, 'createSession'])
+        ->middleware('throttle:30,1')
         ->name('api.stripe.session'); // Alternative: Hosted Stripe Checkout
+        
 });
 

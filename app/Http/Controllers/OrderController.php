@@ -14,6 +14,7 @@ use App\Models\Product;
 use App\Models\ProductVariant;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
@@ -72,15 +73,26 @@ class OrderController extends Controller
     public function store(Request $request): JsonResponse
     {
         $user = $request->user();
-        $paymentMethod = $request->input('payment_method');
 
-        // ── 1. Shared base validation ─────────────────────────────────────────
-        $baseRules = [
-            'address_id'     => ['required', 'integer', 'exists:addresses,id'],
-            'customer_email' => ['nullable', 'email', 'max:255'],
-            'payment_method' => ['required', 'string', 'in:cod,bank_transfer,card'],
-            'coupon_code'    => ['nullable', 'string'],
-        ];
+        // ── 0. Concurrency Prevention: Atomic lock per user checkout ─────────
+        $lock = Cache::lock('checkout_user_' . $user->id, 15);
+        if (!$lock->get()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'An order is already being processed for your account. Please wait a moment.',
+            ], Response::HTTP_CONFLICT);
+        }
+
+        try {
+            $paymentMethod = $request->input('payment_method');
+
+            // ── 1. Shared base validation ─────────────────────────────────────────
+            $baseRules = [
+                'address_id'     => ['required', 'integer', 'exists:addresses,id'],
+                'customer_email' => ['nullable', 'email', 'max:255'],
+                'payment_method' => ['required', 'string', 'in:cod,bank_transfer,card'],
+                'coupon_code'    => ['nullable', 'string'],
+            ];
 
         // ── 2. Per-method additional validation rules ─────────────────────────
         if ($paymentMethod === 'card') {
@@ -362,8 +374,22 @@ class OrderController extends Controller
                     }
 
                     if ($coupon) {
+                        // Concurrency protection: lock coupon row and verify usage limit within transaction
+                        $lockedCoupon = Coupon::where('id', $coupon->id)->lockForUpdate()->first();
+                        if (!$lockedCoupon || ($err = $lockedCoupon->globalValidationError())) {
+                            throw new \RuntimeException($err ?? 'Selected coupon is no longer available.');
+                        }
+
+                        $alreadyUsed = CouponUsage::where('coupon_id', $lockedCoupon->id)
+                            ->where('user_id', $user->id)
+                            ->exists();
+
+                        if ($alreadyUsed) {
+                            throw new \RuntimeException("You have already redeemed coupon '{$lockedCoupon->code}'.");
+                        }
+
                         CouponUsage::create([
-                            'coupon_id' => $coupon->id,
+                            'coupon_id' => $lockedCoupon->id,
                             'user_id'   => $user->id,
                             'order_id'  => $order->id,
                         ]);
@@ -425,7 +451,10 @@ class OrderController extends Controller
             'message' => 'Order placed successfully.',
             'data'    => $order,
         ], Response::HTTP_CREATED);
+    } finally {
+        $lock->release();
     }
+}
 
     /**
      * Cancel a pending order and restore inventory stock.
@@ -486,17 +515,16 @@ class OrderController extends Controller
                 }
             }
 
-            // Update order and payment status
-            $order->update(['status' => 'cancelled']);
-            $order->payments()->update(['status' => 'cancelled']);
+            // Permanently remove related payments, items, and the order record
+            $order->payments()->delete();
+            $order->items()->delete();
+            $order->delete();
         });
-
-        $order->load(['items.product.primaryImage', 'payments']);
 
         return response()->json([
             'success' => true,
-            'message' => 'Order cancelled and product stock restored.',
-            'data' => $order,
+            'message' => 'Order cancelled and permanently deleted from the database.',
+            'data'    => null,
         ], Response::HTTP_OK);
     }
 }
