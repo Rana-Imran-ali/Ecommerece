@@ -26,7 +26,9 @@ const CACHE_TTL = {
 
 // Get stored token
 function getAuthToken() {
-    return localStorage.getItem(API_TOKEN_KEY) || (typeof window !== 'undefined' ? window.SESSION_TOKEN : null);
+    const token = localStorage.getItem(API_TOKEN_KEY) || (typeof window !== 'undefined' ? window.SESSION_TOKEN : null);
+    if (!token || token === 'null' || token === 'undefined') return null;
+    return token;
 }
 
 // Get stored user info
@@ -93,6 +95,14 @@ async function apiFetch(endpoint, options = {}) {
         headers['Authorization'] = `Bearer ${token}`;
     }
 
+    const csrfToken = typeof document !== 'undefined' ? document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') : null;
+    if (csrfToken && !headers['X-CSRF-TOKEN']) {
+        headers['X-CSRF-TOKEN'] = csrfToken;
+    }
+    if (!headers['X-Requested-With']) {
+        headers['X-Requested-With'] = 'XMLHttpRequest';
+    }
+
     // Determine cache TTL for GET requests
     const isGet = method === 'GET';
     const bypassCache = options.bypassCache === true;
@@ -143,6 +153,7 @@ async function apiFetch(endpoint, options = {}) {
     const fetchPromise = (async () => {
         try {
             const response = await fetch(url, {
+                credentials: 'same-origin',
                 ...options,
                 headers,
             });
@@ -153,10 +164,12 @@ async function apiFetch(endpoint, options = {}) {
             }));
 
             if (response.status === 401) {
-                clearAuth();
-                const protectedPaths = ['/cart', '/wishlist', '/addresses', '/profile', '/checkout', '/orders'];
-                if (protectedPaths.some(path => window.location.pathname.startsWith(path))) {
-                    window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname)}`;
+                if (typeof window !== 'undefined' && !window.IS_AUTHENTICATED) {
+                    clearAuth();
+                    const protectedPaths = ['/cart', '/wishlist', '/addresses', '/profile', '/checkout', '/orders'];
+                    if (protectedPaths.some(path => window.location.pathname.startsWith(path))) {
+                        window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname)}`;
+                    }
                 }
             }
 

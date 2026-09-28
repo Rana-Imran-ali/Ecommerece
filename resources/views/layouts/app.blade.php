@@ -19,14 +19,21 @@
         <!-- Authentication Session Bridge: Run before navbar so auth state is immediately synchronized -->
         @auth
             @php
+                $currentUser = auth()->user();
                 $sessionUser = [
-                    'id' => auth()->id(),
-                    'name' => auth()->user()->name,
-                    'email' => auth()->user()->email,
-                    'role' => auth()->user()->role ?? 'customer',
-                    'avatar_url' => auth()->user()->avatar_url,
+                    'id'         => $currentUser->id,
+                    'name'       => $currentUser->name,
+                    'email'      => $currentUser->email,
+                    'role'       => $currentUser->role ?? 'customer',
+                    'avatar_url' => $currentUser->avatar_url,
                 ];
-                $sessionToken = \Illuminate\Support\Facades\Crypt::encryptString(auth()->id() . '|' . time());
+                // Reuse existing session token or create a dedicated web-session token
+                $sessionToken = session('api_token');
+                if (!$sessionToken) {
+                    $currentUser->tokens()->where('name', 'web-session')->delete();
+                    $sessionToken = $currentUser->createToken('web-session')->plainTextToken;
+                    session(['api_token' => $sessionToken]);
+                }
             @endphp
             <script>
                 window.IS_AUTHENTICATED = true;

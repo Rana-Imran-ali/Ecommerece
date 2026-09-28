@@ -71,6 +71,12 @@ Route::middleware([ApiAuthMiddleware::class, 'admin'])->group(function () {
         Route::put('/{product}/images/{image}/primary', [ProductController::class, 'setPrimaryImage'])->name('api.products.images.primary');
         Route::delete('/{product}/images/{image}', [ProductController::class, 'deleteImage'])->name('api.products.images.delete');
         Route::patch('/{product}/stock', [ProductController::class, 'updateStock'])->name('api.products.stock.update');
+
+        // Variant & Option Management
+        Route::post('/{product}/options',                                   [ProductController::class, 'storeOption'])->name('api.products.options.store');
+        Route::post('/{product}/variants',                                  [ProductController::class, 'storeVariant'])->name('api.products.variants.store');
+        Route::put('/{product}/variants/{variant}',                         [ProductController::class, 'updateVariant'])->name('api.products.variants.update');
+        Route::delete('/{product}/variants/{variant}',                      [ProductController::class, 'destroyVariant'])->name('api.products.variants.destroy');
     });
 
     // Categories Admin API

@@ -6,17 +6,14 @@ use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Validation\Rules\Password;
 use Symfony\Component\HttpFoundation\Response;
 
 class AuthController extends Controller
 {
     /**
-     * Register a new user and generate an auth token.
+     * Register a new user and generate a Sanctum API token.
      */
     public function register(Request $request): JsonResponse
     {
@@ -32,7 +29,9 @@ class AuthController extends Controller
             'password' => Hash::make($validated['password']),
         ]);
 
-        $token = Crypt::encryptString("{$user->id}|" . time());
+        // Issue a Sanctum token for the registering device
+        $deviceName = $request->header('User-Agent') ?? 'web-token';
+        $token = $user->createToken($deviceName)->plainTextToken;
 
         // Synchronize web session if available so protected web routes work seamlessly
         if ($request->hasSession()) {
@@ -54,7 +53,7 @@ class AuthController extends Controller
     }
 
     /**
-     * Log in an existing user and return an auth token.
+     * Log in an existing user and return a Sanctum API token.
      */
     public function login(Request $request): JsonResponse
     {
@@ -72,7 +71,9 @@ class AuthController extends Controller
             ], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
-        $token = Crypt::encryptString("{$user->id}|" . time());
+        // Issue a Sanctum token for this device/browser
+        $deviceName = $request->header('User-Agent') ?? 'web-token';
+        $token = $user->createToken($deviceName)->plainTextToken;
 
         // Synchronize web session if available so protected web routes work seamlessly
         if ($request->hasSession()) {
@@ -94,14 +95,14 @@ class AuthController extends Controller
     }
 
     /**
-     * Log out the current user (blacklist the bearer token).
+     * Log out the current user by revoking only this device's token from the database.
      */
     public function logout(Request $request): JsonResponse
     {
-        $token = $request->bearerToken();
-        if ($token) {
-            // Blacklist the token for 30 days
-            Cache::put('token_blacklist_' . sha1($token), true, now()->addDays(30));
+        // Delete only the current device's token from personal_access_tokens table.
+        // Unlike cache blacklisting, this persists even if cache is flushed.
+        if ($request->user()) {
+            $request->user()->currentAccessToken()->delete();
         }
 
         if ($request->hasSession()) {
@@ -179,6 +180,8 @@ class AuthController extends Controller
 
     /**
      * Change the authenticated user's password.
+     * Revokes ALL existing tokens across every device for security,
+     * then issues a fresh token for the current device.
      */
     public function updatePassword(Request $request): JsonResponse
     {
@@ -200,9 +203,18 @@ class AuthController extends Controller
             'password' => Hash::make($validated['password']),
         ]);
 
+        // Revoke ALL tokens across every device (phone, laptop, other browsers).
+        // This closes any compromised session immediately upon password change.
+        $user->tokens()->delete();
+
+        // Issue a fresh token for the current device so this session stays active.
+        $deviceName = $request->header('User-Agent') ?? 'web-token';
+        $newToken = $user->createToken($deviceName)->plainTextToken;
+
         return response()->json([
             'success' => true,
-            'message' => 'Password updated successfully.',
+            'message' => 'Password updated successfully. All other devices have been logged out.',
+            'token'   => $newToken,
         ], Response::HTTP_OK);
     }
 
@@ -230,11 +242,8 @@ class AuthController extends Controller
             Storage::disk('public')->delete($user->avatar);
         }
 
-        // Blacklist the current token before deleting
-        $token = $request->bearerToken();
-        if ($token) {
-            Cache::put('token_blacklist_' . sha1($token), true, now()->addDays(30));
-        }
+        // Revoke all Sanctum tokens across all devices before deletion
+        $user->tokens()->delete();
 
         if ($request->hasSession()) {
             Auth::guard('web')->logout();

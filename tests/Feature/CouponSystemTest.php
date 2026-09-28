@@ -12,7 +12,6 @@ use App\Models\Product;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Crypt;
 use Tests\TestCase;
 
 class CouponSystemTest extends TestCase
@@ -34,7 +33,7 @@ class CouponSystemTest extends TestCase
             'role' => 'user',
         ]);
 
-        $this->token = Crypt::encryptString("{$this->user->id}|" . time());
+        $this->token = $this->user->createToken('test-device')->plainTextToken;
 
         $this->category = Category::create(['name' => 'Electronics']);
 

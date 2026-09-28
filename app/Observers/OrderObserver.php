@@ -44,7 +44,7 @@ class OrderObserver
      * @param string $type    'status' | 'approval' | 'delivery_date'
      * @param string $trigger A label for log context
      */
-    public function dispatchNotification(Order $order, string $type, string $trigger): void
+    public function dispatchNotification(Order $order, string $type, string $trigger, bool $immediate = false): void
     {
         $recipientEmail = $order->recipient_email;
 
@@ -58,10 +58,15 @@ class OrderObserver
 
         // ── Email notification ────────────────────────────────────────────
         try {
-            Notification::route('mail', $recipientEmail)
-                ->notify(new OrderStatusNotification($order, $type));
+            $notification = new OrderStatusNotification($order, $type);
 
-            Log::info("Order #{$order->id} [{$order->status}] {$type} notification dispatched to {$recipientEmail} (trigger: {$trigger})", [
+            if ($immediate) {
+                Notification::route('mail', $recipientEmail)->notifyNow($notification);
+            } else {
+                Notification::route('mail', $recipientEmail)->notify($notification);
+            }
+
+            Log::info("Order #{$order->id} [{$order->status}] {$type} notification dispatched to {$recipientEmail} (trigger: {$trigger}, immediate: " . ($immediate ? 'yes' : 'no') . ")", [
                 'order_id'        => $order->id,
                 'type'            => $type,
                 'status'          => $order->status,
@@ -76,6 +81,10 @@ class OrderObserver
                 'recipient_email' => $recipientEmail,
                 'exception'       => get_class($e),
             ]);
+
+            if ($immediate) {
+                throw $e;
+            }
         }
 
         // ── WhatsApp notification (optional, non-blocking) ────────────────

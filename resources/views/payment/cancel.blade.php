@@ -25,8 +25,8 @@
 
             <!-- Info Box -->
             <div class="p-4 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-800 space-y-1">
-                <p class="font-semibold">What happened to my order?</p>
-                <p>Your order was placed but is currently <strong>pending payment</strong>. It will be automatically cancelled if payment is not completed.</p>
+                <p class="font-semibold">What happened to my items?</p>
+                <p>Your items are safely saved in your shopping cart. No charge has been made to your card.</p>
                 @if($orderId)
                 <p class="text-xs text-amber-600 mt-1 font-mono">Order Reference: #{{ $orderId }}</p>
                 @endif

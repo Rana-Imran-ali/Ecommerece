@@ -7,10 +7,46 @@ use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
+use Illuminate\Support\Facades\Log;
 
 class OrderStatusNotification extends Notification implements ShouldQueue
 {
     use Queueable;
+
+    // ── Queue configuration ───────────────────────────────────────────────
+
+
+    /**
+     * The number of times this notification may be attempted.
+     * 3 attempts: initial + 2 retries.
+     */
+    public int $tries = 3;
+
+    /**
+     * Exponential backoff delays between retry attempts (seconds).
+     * Attempt 1 fails → wait 60s → Attempt 2 fails → wait 120s → Attempt 3.
+     *
+     * @return int[]
+     */
+    public function backoff(): array
+    {
+        return [60, 120];
+    }
+
+    /**
+     * Maximum seconds a single job execution may run before timing out.
+     * Prevents a hung SMTP connection from locking the worker forever.
+     */
+    public int $timeout = 30;
+
+    /**
+     * The notification will no longer be attempted after this time.
+     * Stops retrying stale order emails after 24 hours.
+     */
+    public function retryUntil(): \DateTime
+    {
+        return now()->addHours(24);
+    }
 
     public Order $order;
 
@@ -32,6 +68,7 @@ class OrderStatusNotification extends Notification implements ShouldQueue
     {
         $this->order = $order->loadMissing(['items.product', 'address', 'user']);
         $this->type  = $type;
+        $this->onQueue('notifications');
     }
 
     /**
@@ -153,6 +190,21 @@ class OrderStatusNotification extends Notification implements ShouldQueue
             'expected_delivery_date' => $this->order->expected_delivery_date,
             'recipient_email'        => $this->order->recipient_email,
         ];
+    }
+
+    /**
+     * Handle a notification job failure after all retries are exhausted.
+     * Logs a critical alert so ops/monitoring systems can catch failed email delivery.
+     */
+    public function failed(\Throwable $exception): void
+    {
+        Log::critical("OrderStatusNotification permanently failed for Order #{$this->order->id}", [
+            'order_id'        => $this->order->id,
+            'type'            => $this->type,
+            'status'          => $this->order->status,
+            'recipient_email' => $this->order->recipient_email,
+            'exception'       => $exception->getMessage(),
+        ]);
     }
 }
 

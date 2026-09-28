@@ -7,8 +7,12 @@ use App\Http\Requests\StoreProductRequest;
 use App\Http\Requests\UpdateProductRequest;
 use App\Http\Requests\UploadProductImageRequest;
 use App\Http\Requests\ValidateStockRequest;
+use App\Models\InventoryLog;
 use App\Models\Product;
 use App\Models\ProductImage;
+use App\Models\ProductOption;
+use App\Models\ProductOptionValue;
+use App\Models\ProductVariant;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -404,6 +408,239 @@ class ProductController extends Controller
                 'stock' => $updatedStock,
                 'in_stock' => $updatedStock > 0,
             ],
+        ], Response::HTTP_OK);
+    }
+
+    // =========================================================================
+    // Variant & Option Management (Admin Only)
+    // =========================================================================
+
+    /**
+     * Create a new product option with its values.
+     *
+     * POST /api/products/{product}/options
+     * Body: { "name": "Size", "values": ["S", "M", "L"] }
+     */
+    public function storeOption(Request $request, Product $product): JsonResponse
+    {
+        $validated = $request->validate([
+            'name'          => ['required', 'string', 'max:100'],
+            'values'        => ['required', 'array', 'min:1'],
+            'values.*'      => ['required', 'string', 'max:100'],
+        ]);
+
+        DB::transaction(function () use ($validated, $product, &$option) {
+            $option = ProductOption::create([
+                'product_id' => $product->id,
+                'name'       => trim($validated['name']),
+            ]);
+
+            foreach (array_unique($validated['values']) as $val) {
+                ProductOptionValue::create([
+                    'product_option_id' => $option->id,
+                    'value'             => trim($val),
+                ]);
+            }
+        });
+
+        $option->load('values');
+
+        return response()->json([
+            'success' => true,
+            'message' => "Option '{$option->name}' created with " . $option->values->count() . ' value(s).',
+            'data'    => $option,
+        ], Response::HTTP_CREATED);
+    }
+
+    /**
+     * Create a new variant for a product and link it to option values.
+     *
+     * POST /api/products/{product}/variants
+     * Body: {
+     *   "sku": "TSHIRT-RED-L",       // optional
+     *   "price": 29.99,               // optional; inherits product price if null
+     *   "stock": 50,
+     *   "status": "active",           // optional, default active
+     *   "option_value_ids": [1, 3]    // IDs from product_option_values table
+     * }
+     */
+    public function storeVariant(Request $request, Product $product): JsonResponse
+    {
+        $validated = $request->validate([
+            'sku'              => ['nullable', 'string', 'max:100', 'unique:product_variants,sku'],
+            'price'            => ['nullable', 'numeric', 'min:0'],
+            'stock'            => ['required', 'integer', 'min:0'],
+            'status'           => ['nullable', 'string', 'in:active,inactive'],
+            'option_value_ids' => ['nullable', 'array'],
+            'option_value_ids.*' => ['integer', 'exists:product_option_values,id'],
+        ]);
+
+        $variant = DB::transaction(function () use ($validated, $product, $request) {
+            $variant = ProductVariant::create([
+                'product_id' => $product->id,
+                'sku'        => $validated['sku'] ?? null,
+                'price'      => isset($validated['price']) ? (float) $validated['price'] : null,
+                'stock'      => (int) $validated['stock'],
+                'status'     => $validated['status'] ?? 'active',
+            ]);
+
+            if (!empty($validated['option_value_ids'])) {
+                // Verify the option values belong to this product's options
+                $validValueIds = ProductOptionValue::whereHas(
+                    'option',
+                    fn($q) => $q->where('product_id', $product->id)
+                )->whereIn('id', $validated['option_value_ids'])->pluck('id');
+
+                $variant->optionValues()->sync($validValueIds);
+            }
+
+            // Log initial stock for the new variant
+            if ($variant->stock > 0) {
+                InventoryLog::create([
+                    'product_id'         => $product->id,
+                    'product_variant_id' => $variant->id,
+                    'user_id'            => $request->user()->id,
+                    'type'               => 'initial',
+                    'quantity'           => $variant->stock,
+                    'quantity_before'    => 0,
+                    'quantity_after'     => $variant->stock,
+                    'notes'              => "Initial stock for new variant" . ($variant->sku ? " (SKU: {$variant->sku})" : ''),
+                ]);
+            }
+
+            return $variant;
+        });
+
+        $variant->load('optionValues.option');
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Variant created successfully.',
+            'data'    => [
+                'id'              => $variant->id,
+                'sku'             => $variant->sku,
+                'price'           => $variant->price,
+                'effective_price' => $variant->effective_price,
+                'stock'           => $variant->stock,
+                'status'          => $variant->status,
+                'title'           => $variant->title,
+                'option_values'   => $variant->optionValues,
+            ],
+        ], Response::HTTP_CREATED);
+    }
+
+    /**
+     * Update an existing variant's price, stock, SKU, or status.
+     *
+     * PUT /api/products/{product}/variants/{variant}
+     * Body: { "price": 34.99, "stock": 20, "status": "inactive" }
+     */
+    public function updateVariant(Request $request, Product $product, ProductVariant $variant): JsonResponse
+    {
+        // Ensure the variant belongs to this product
+        if ((int) $variant->product_id !== (int) $product->id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Variant does not belong to this product.',
+            ], Response::HTTP_NOT_FOUND);
+        }
+
+        $validated = $request->validate([
+            'sku'    => ['nullable', 'string', 'max:100', 'unique:product_variants,sku,' . $variant->id],
+            'price'  => ['nullable', 'numeric', 'min:0'],
+            'stock'  => ['nullable', 'integer', 'min:0'],
+            'status' => ['nullable', 'string', 'in:active,inactive'],
+            'option_value_ids' => ['nullable', 'array'],
+            'option_value_ids.*' => ['integer', 'exists:product_option_values,id'],
+        ]);
+
+        DB::transaction(function () use ($validated, $product, $variant, $request) {
+            $stockBefore = (int) $variant->stock;
+
+            $variant->update(array_filter([
+                'sku'    => $validated['sku']   ?? $variant->sku,
+                'price'  => array_key_exists('price', $validated)  ? $validated['price']  : $variant->price,
+                'stock'  => array_key_exists('stock', $validated)  ? (int) $validated['stock'] : $variant->stock,
+                'status' => $validated['status'] ?? $variant->status,
+            ], fn($v) => $v !== null));
+
+            if (!empty($validated['option_value_ids'])) {
+                $validValueIds = ProductOptionValue::whereHas(
+                    'option',
+                    fn($q) => $q->where('product_id', $product->id)
+                )->whereIn('id', $validated['option_value_ids'])->pluck('id');
+
+                $variant->optionValues()->sync($validValueIds);
+            }
+
+            // Log a stock adjustment if stock changed
+            $stockAfter = (int) $variant->fresh()->stock;
+            if ($stockAfter !== $stockBefore) {
+                InventoryLog::create([
+                    'product_id'         => $product->id,
+                    'product_variant_id' => $variant->id,
+                    'user_id'            => $request->user()->id,
+                    'type'               => 'adjustment',
+                    'quantity'           => $stockAfter - $stockBefore,
+                    'quantity_before'    => $stockBefore,
+                    'quantity_after'     => $stockAfter,
+                    'notes'              => 'Admin stock adjustment via variant update' . ($variant->sku ? " (SKU: {$variant->sku})" : ''),
+                ]);
+            }
+        });
+
+        $variant->refresh()->load('optionValues.option');
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Variant updated successfully.',
+            'data'    => [
+                'id'              => $variant->id,
+                'sku'             => $variant->sku,
+                'price'           => $variant->price,
+                'effective_price' => $variant->effective_price,
+                'stock'           => $variant->stock,
+                'status'          => $variant->status,
+                'title'           => $variant->title,
+                'option_values'   => $variant->optionValues,
+            ],
+        ], Response::HTTP_OK);
+    }
+
+    /**
+     * Soft-delete a product variant.
+     * Variants that have existing order items are soft-deleted (history preserved).
+     *
+     * DELETE /api/products/{product}/variants/{variant}
+     */
+    public function destroyVariant(Request $request, Product $product, ProductVariant $variant): JsonResponse
+    {
+        if ((int) $variant->product_id !== (int) $product->id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Variant does not belong to this product.',
+            ], Response::HTTP_NOT_FOUND);
+        }
+
+        // Log a zero-out stock adjustment before deletion for audit trail
+        if ($variant->stock > 0) {
+            InventoryLog::create([
+                'product_id'         => $product->id,
+                'product_variant_id' => $variant->id,
+                'user_id'            => $request->user()->id,
+                'type'               => 'adjustment',
+                'quantity'           => -$variant->stock,
+                'quantity_before'    => $variant->stock,
+                'quantity_after'     => 0,
+                'notes'              => 'Variant deleted by admin' . ($variant->sku ? " (SKU: {$variant->sku})" : ''),
+            ]);
+        }
+
+        $variant->delete(); // Soft delete — preserves order history
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Variant deleted. Order history is preserved.',
         ], Response::HTTP_OK);
     }
 }

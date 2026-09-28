@@ -6,8 +6,7 @@ use App\Models\Coupon;
 use App\Models\CouponUsage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Crypt;
+use Laravel\Sanctum\PersonalAccessToken;
 use Symfony\Component\HttpFoundation\Response;
 
 class CouponController extends Controller
@@ -61,18 +60,13 @@ class CouponController extends Controller
         }
 
         // ── 2. Per-user single-use check (optional, needs auth) ───────────────
+        // Resolve user from Sanctum token if the request is from a logged-in customer.
+        // This endpoint is public, so a missing token is acceptable.
         $user = $request->user();
-        if (!$user && ($token = $request->bearerToken())) {
-            try {
-                if (!Cache::has('token_blacklist_' . sha1($token))) {
-                    $decrypted = Crypt::decryptString($token);
-                    $parts     = explode('|', $decrypted);
-                    if (count($parts) >= 2 && (time() - (int) $parts[1] <= 30 * 86400)) {
-                        $user = \App\Models\User::find((int) $parts[0]);
-                    }
-                }
-            } catch (\Throwable $e) {
-                // Ignore invalid token on public endpoint
+        if (!$user && ($rawToken = $request->bearerToken())) {
+            $accessToken = PersonalAccessToken::findToken($rawToken);
+            if ($accessToken && $accessToken->tokenable) {
+                $user = $accessToken->tokenable;
             }
         }
 

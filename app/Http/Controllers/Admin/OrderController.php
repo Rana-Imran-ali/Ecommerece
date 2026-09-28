@@ -112,9 +112,12 @@ class OrderController extends Controller
             return back()->with('error', "No recipient email found for Order #{$order->id}.");
         }
 
-        (new OrderObserver())->dispatchNotification($order, 'approval', 'admin_manual_approval');
-
-        return back()->with('success', "✅ Approval email sent to {$recipientEmail} for Order #{$order->id}.");
+        try {
+            (new OrderObserver())->dispatchNotification($order, 'approval', 'admin_manual_approval', true);
+            return back()->with('success', "✅ Approval email sent to {$recipientEmail} for Order #{$order->id}.");
+        } catch (\Throwable $e) {
+            return back()->with('error', "Could not send approval email to {$recipientEmail}: " . $e->getMessage());
+        }
     }
 
     public function sendDeliveryDateEmail(Request $request, Order $order)
@@ -134,9 +137,12 @@ class OrderController extends Controller
         $order->update(['expected_delivery_date' => $validated['expected_delivery_date']]);
         $order->refresh();
 
-        (new OrderObserver())->dispatchNotification($order, 'delivery_date', 'admin_manual_delivery_date');
-
-        $formattedDate = $order->expected_delivery_formatted ?? $validated['expected_delivery_date'];
-        return back()->with('success', "📦 Delivery date email sent to {$recipientEmail}. Expected: {$formattedDate}.");
+        try {
+            (new OrderObserver())->dispatchNotification($order, 'delivery_date', 'admin_manual_delivery_date', true);
+            $formattedDate = $order->expected_delivery_formatted ?? $validated['expected_delivery_date'];
+            return back()->with('success', "📦 Delivery date email sent to {$recipientEmail}. Expected: {$formattedDate}.");
+        } catch (\Throwable $e) {
+            return back()->with('error', "Could not send delivery date email to {$recipientEmail}: " . $e->getMessage());
+        }
     }
 }

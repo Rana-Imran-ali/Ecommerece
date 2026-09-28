@@ -19,12 +19,13 @@ class AddressController extends Controller
             ->orderByDesc('is_default')
             ->latest('id')
             ->get();
-
+           
         return response()->json([
             'success' => true,
             'data' => $addresses,
         ], Response::HTTP_OK);
     }
+    
 
     /**
      * Store a newly created address.

@@ -23,7 +23,7 @@ class PerformanceAndOptimizationTest extends TestCase
     {
         parent::setUp();
         $this->admin = User::factory()->create(['role' => 'admin']);
-        $this->adminToken = \Illuminate\Support\Facades\Crypt::encryptString("{$this->admin->id}|" . time());
+        $this->adminToken = $this->admin->createToken('test-device')->plainTextToken;
     }
 
     public function test_categories_are_cached_and_invalidated_on_mutation(): void

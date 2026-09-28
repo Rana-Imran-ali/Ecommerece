@@ -23,7 +23,7 @@ class ProductControllerTest extends TestCase
         parent::setUp();
         $this->category = Category::create(['name' => 'Electronics']);
         $this->admin = \App\Models\User::factory()->create(['role' => 'admin']);
-        $this->adminToken = \Illuminate\Support\Facades\Crypt::encryptString("{$this->admin->id}|" . time());
+        $this->adminToken = $this->admin->createToken('test-device')->plainTextToken;
     }
 
     public function test_can_list_products_with_filters_and_search(): void
@@ -75,7 +75,7 @@ class ProductControllerTest extends TestCase
 
         // Regular customer cannot create
         $customer = \App\Models\User::factory()->create(['role' => 'customer']);
-        $customerToken = \Illuminate\Support\Facades\Crypt::encryptString("{$customer->id}|" . time());
+        $customerToken = $customer->createToken('test-device')->plainTextToken;
 
         $this->withHeader('Authorization', "Bearer {$customerToken}")
             ->postJson('/api/products', [

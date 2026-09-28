@@ -7,7 +7,6 @@ use App\Models\Category;
 use App\Models\Product;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
@@ -29,7 +28,7 @@ class FrontendApiIntegrationTest extends TestCase
             'password' => Hash::make('password123'),
         ]);
 
-        $this->token = Crypt::encryptString("{$this->user->id}|" . time());
+        $this->token = $this->user->createToken('test-device')->plainTextToken;
 
         $this->category = Category::create(['name' => 'Computers']);
 
@@ -131,7 +130,7 @@ class FrontendApiIntegrationTest extends TestCase
 
         // Admin can create category
         $admin = User::factory()->create(['role' => 'admin']);
-        $adminToken = Crypt::encryptString("{$admin->id}|" . time());
+        $adminToken = $admin->createToken('test-device')->plainTextToken;
 
         $createRes = $this->withHeader('Authorization', "Bearer {$adminToken}")
             ->postJson('/api/categories', ['name' => 'Smartphones']);

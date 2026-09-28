@@ -1011,20 +1011,18 @@ async function handleUpdateProfile(e) {
     fd.append('email', document.getElementById('prof-email').value.trim());
     if (avatarFile) fd.append('avatar', avatarFile);
 
-    const token = getAuthToken();
-    const res = await fetch('/api/profile', {
+    const res = await apiFetch('/api/profile', {
         method: 'POST',
-        headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/json' },
         body: fd,
     });
-    const data = await res.json();
+    const data = res.data;
 
     btn.disabled = false; btn.textContent = 'Save Changes';
 
     if (res.ok) {
         avatarFile = null;
         showAlert('profile-alert', 'Profile updated successfully!', 'success');
-        if (data.user) setAuthData(token, data.user);
+        if (data?.user) setAuthData(getAuthToken(), data.user);
         await loadUserData();
     } else {
         showAlert('profile-alert', data?.message || 'Failed to update profile.', 'danger');

@@ -12,7 +12,7 @@ use App\Models\Product;
 use App\Models\Review;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Crypt;
+use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
 class OrderAndReviewTest extends TestCase
@@ -34,10 +34,10 @@ class OrderAndReviewTest extends TestCase
         parent::setUp();
 
         $this->user1 = User::factory()->create(['name' => 'Alice']);
-        $this->token1 = Crypt::encryptString("{$this->user1->id}|" . time());
+        $this->token1 = $this->user1->createToken('test-device')->plainTextToken;
 
         $this->user2 = User::factory()->create(['name' => 'Bob']);
-        $this->token2 = Crypt::encryptString("{$this->user2->id}|" . time());
+        $this->token2 = $this->user2->createToken('test-device')->plainTextToken;
 
         $this->category = Category::create(['name' => 'Electronics']);
 

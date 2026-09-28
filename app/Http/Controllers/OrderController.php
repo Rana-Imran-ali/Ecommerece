@@ -83,8 +83,54 @@ class OrderController extends Controller
             ], Response::HTTP_CONFLICT);
         }
 
+        $paymentMethod         = $request->input('payment_method');
+        $stripePaymentIntentId = $request->input('stripe_payment_intent_id');
+
+        // ── Concurrency Prevention: Atomic lock on the specific PaymentIntent ──
+        // Synchronizes client checkout directly with Stripe webhook
+        $piLock = ($paymentMethod === 'card' && !empty($stripePaymentIntentId))
+            ? Cache::lock('stripe_pi_' . $stripePaymentIntentId, 15)
+            : null;
+
+        if ($piLock) {
+            try {
+                $piLock->block(5);
+            } catch (\Throwable $e) {}
+        }
+
         try {
-            $paymentMethod = $request->input('payment_method');
+            // ── Webhook Race Condition Resolution ─────────────────────────────
+            // If the Stripe webhook arrived first and already fulfilled this order,
+            // return the created order gracefully instead of throwing 422.
+            if ($paymentMethod === 'card' && !empty($stripePaymentIntentId)) {
+                $existingPayment = Payment::where('stripe_payment_intent_id', $stripePaymentIntentId)->first();
+                if ($existingPayment) {
+                    $existingOrder = $existingPayment->order;
+                    if ($existingOrder && (int) $existingOrder->user_id === (int) $user->id) {
+                        $userCart = Cart::where('user_id', $user->id)->first();
+                        // Replay protection: if user still has an active cart with items, reject reuse
+                        if ($userCart && $userCart->items()->exists()) {
+                            return response()->json([
+                                'success' => false,
+                                'message' => 'This payment has already been processed for an existing order.',
+                            ], Response::HTTP_UNPROCESSABLE_ENTITY);
+                        }
+
+                        // Webhook successfully fulfilled the order and cleared the cart!
+                        $existingOrder->load(['items.product.primaryImage', 'address', 'payments', 'couponUsages.coupon']);
+                        return response()->json([
+                            'success' => true,
+                            'message' => 'Order already processed.',
+                            'data'    => $existingOrder,
+                        ], Response::HTTP_OK);
+                    }
+
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'This payment has already been processed for an existing order.',
+                    ], Response::HTTP_UNPROCESSABLE_ENTITY);
+                }
+            }
 
             // ── 1. Shared base validation ─────────────────────────────────────────
             $baseRules = [
@@ -340,15 +386,21 @@ class OrderController extends Controller
                             $variantBeforeStock = (int) $variant->stock;
                             $variantAfterStock  = $variantBeforeStock - $cartItem->quantity;
                             $variant->update(['stock' => $variantAfterStock]);
+
+                            // Variant-based items: only deduct variant stock — do NOT touch parent product stock.
+                            // Parent product.stock is a display-level aggregate; variant stock is the true inventory.
+                            $beforeStock = $variantBeforeStock;
+                            $afterStock  = $variantAfterStock;
                         } else {
                             if (!$product || $product->stock < $cartItem->quantity) {
                                 throw new \RuntimeException("Insufficient stock for '{$cartItem->product->name}'. Available: " . ($product->stock ?? 0));
                             }
-                        }
 
-                        $beforeStock = (int) $product->stock;
-                        $afterStock  = max(0, $beforeStock - $cartItem->quantity);
-                        $product->update(['stock' => $afterStock]);
+                            // No variant: deduct directly from parent product stock.
+                            $beforeStock = (int) $product->stock;
+                            $afterStock  = max(0, $beforeStock - $cartItem->quantity);
+                            $product->update(['stock' => $afterStock]);
+                        }
 
                         OrderItem::create([
                             'order_id'           => $order->id,
@@ -366,8 +418,8 @@ class OrderController extends Controller
                             'user_id'            => $user->id,
                             'type'               => 'sale',
                             'quantity'           => -$cartItem->quantity,
-                            'quantity_before'    => $variant ? $variantBeforeStock : $beforeStock,
-                            'quantity_after'     => $variant ? $variantAfterStock : $afterStock,
+                            'quantity_before'    => $beforeStock,
+                            'quantity_after'     => $afterStock,
                             'reference_id'       => (string) $order->id,
                             'notes'              => "Order #{$order->id} placed via " . strtoupper($paymentMethod) . ($variantName ? " ({$variantName})" : ''),
                         ]);
@@ -453,6 +505,11 @@ class OrderController extends Controller
         ], Response::HTTP_CREATED);
     } finally {
         $lock->release();
+        if (isset($piLock) && $piLock) {
+            try {
+                $piLock->release();
+            } catch (\Throwable $e) {}
+        }
     }
 }
 
@@ -484,8 +541,6 @@ class OrderController extends Controller
             foreach ($order->items as $item) {
                 $product = Product::where('id', $item->product_id)->lockForUpdate()->first();
                 $variant = null;
-                $variantBefore = null;
-                $variantAfter = null;
 
                 if ($item->product_variant_id) {
                     $variant = ProductVariant::where('id', $item->product_variant_id)->lockForUpdate()->first();
@@ -493,22 +548,35 @@ class OrderController extends Controller
                         $variantBefore = (int) $variant->stock;
                         $variantAfter  = $variantBefore + $item->quantity;
                         $variant->update(['stock' => $variantAfter]);
-                    }
-                }
 
-                if ($product) {
+                        // Variant-based items: restore variant stock only — do NOT touch parent product stock.
+                        // Mirrors the corrected store() logic.
+                        InventoryLog::create([
+                            'product_id'         => $product?->id ?? $item->product_id,
+                            'product_variant_id' => $variant->id,
+                            'user_id'            => $request->user()->id,
+                            'type'               => 'return',
+                            'quantity'           => $item->quantity,
+                            'quantity_before'    => $variantBefore,
+                            'quantity_after'     => $variantAfter,
+                            'reference_id'       => (string) $order->id,
+                            'notes'              => "Stock restored due to customer order #{$order->id} cancellation ({$item->variant_name})",
+                        ]);
+                    }
+                } elseif ($product) {
+                    // No variant: restore parent product stock.
                     $before = (int) $product->stock;
                     $after  = $before + $item->quantity;
                     $product->update(['stock' => $after]);
 
                     InventoryLog::create([
                         'product_id'         => $product->id,
-                        'product_variant_id' => $variant?->id,
+                        'product_variant_id' => null,
                         'user_id'            => $request->user()->id,
                         'type'               => 'return',
                         'quantity'           => $item->quantity,
-                        'quantity_before'    => $variant ? $variantBefore : $before,
-                        'quantity_after'     => $variant ? $variantAfter : $after,
+                        'quantity_before'    => $before,
+                        'quantity_after'     => $after,
                         'reference_id'       => (string) $order->id,
                         'notes'              => "Stock restored due to customer order #{$order->id} cancellation" . ($item->variant_name ? " ({$item->variant_name})" : ''),
                     ]);
