@@ -72,20 +72,20 @@
 
     function renderProductSkeleton() {
         document.getElementById('product-details-card').innerHTML = `
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 items-start animate-pulse">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
                 <div class="space-y-4">
-                    <div class="w-full h-80 bg-gray-200 rounded-lg"></div>
+                    <div class="w-full h-80 bg-gray-100 rounded-xl flex items-center justify-center text-xs text-gray-400">Loading product media...</div>
                     <div class="flex space-x-2">
-                        <div class="w-16 h-16 bg-gray-200 rounded"></div>
-                        <div class="w-16 h-16 bg-gray-200 rounded"></div>
+                        <div class="w-16 h-16 bg-gray-100 rounded-lg"></div>
+                        <div class="w-16 h-16 bg-gray-100 rounded-lg"></div>
                     </div>
                 </div>
                 <div class="space-y-4">
-                    <div class="h-4 bg-gray-200 rounded w-1/4"></div>
-                    <div class="h-8 bg-gray-200 rounded w-3/4"></div>
-                    <div class="h-6 bg-gray-200 rounded w-1/3"></div>
-                    <div class="h-20 bg-gray-200 rounded w-full"></div>
-                    <div class="h-10 bg-gray-200 rounded w-1/2"></div>
+                    <div class="h-4 bg-gray-100 rounded w-1/4"></div>
+                    <div class="h-8 bg-gray-100 rounded w-3/4"></div>
+                    <div class="h-6 bg-gray-100 rounded w-1/3"></div>
+                    <div class="h-20 bg-gray-100 rounded w-full"></div>
+                    <div class="h-10 bg-gray-100 rounded w-1/2"></div>
                 </div>
             </div>
         `;
@@ -93,10 +93,10 @@
 
     function renderReviewsSkeleton() {
         document.getElementById('reviews-list').innerHTML = `
-            <div class="space-y-3 animate-pulse pt-2">
-                <div class="h-4 bg-gray-200 rounded w-1/4"></div>
-                <div class="h-3 bg-gray-200 rounded w-3/4"></div>
-                <div class="h-3 bg-gray-200 rounded w-1/2"></div>
+            <div class="space-y-3 pt-2">
+                <div class="h-4 bg-gray-100 rounded w-1/4"></div>
+                <div class="h-3 bg-gray-100 rounded w-3/4"></div>
+                <div class="h-3 bg-gray-100 rounded w-1/2"></div>
             </div>
         `;
     }
@@ -262,7 +262,7 @@
         container.innerHTML = `
             <div class="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
                 <div class="space-y-4">
-                    <div class="w-full h-80 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden border border-gray-100">
+                    <div class="w-full h-80 bg-gray-50 rounded-xl flex items-center justify-center overflow-hidden border border-gray-200">
                         ${mainImage 
                             ? `<img id="active-image" src="${mainImage}" alt="${p.name}" class="h-full w-full object-contain">`
                             : `<span class="text-sm text-gray-400">No Image Available</span>`}
@@ -271,12 +271,12 @@
                     ${p.images?.length > 1 ? `
                         <div class="flex items-center space-x-2 overflow-x-auto pb-2">
                             ${p.images.map(img => {
-                                const url = resolveImgUrl(img);
-                                return `
-                                    <button type="button" onclick="document.getElementById('active-image').src='${url}'" class="w-16 h-16 rounded border border-gray-200 overflow-hidden shrink-0 hover:border-indigo-600">
-                                        <img src="${url}" class="w-full h-full object-cover">
-                                    </button>
-                                `;
+                                 const url = resolveImgUrl(img);
+                                 return `
+                                     <button type="button" onclick="document.getElementById('active-image').src='${url}'" class="w-16 h-16 rounded-lg border border-gray-200 overflow-hidden shrink-0 hover:border-indigo-600 focus:outline-none">
+                                         <img src="${url}" class="w-full h-full object-cover">
+                                     </button>
+                                 `;
                             }).join('')}
                         </div>
                     ` : ''}
@@ -288,11 +288,11 @@
                         <span id="product-sku-display" class="text-gray-400 font-mono font-normal">${initialSku ? `SKU: ${initialSku}` : ''}</span>
                     </div>
 
-                    <h1 class="text-3xl font-bold text-gray-900 tracking-tight">${p.name}</h1>
+                    <h1 class="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight">${p.name}</h1>
 
                     <div class="flex items-center space-x-3">
-                        <span id="product-display-price" class="text-2xl font-bold text-gray-900">$${parseFloat(initialPrice).toFixed(2)}</span>
-                        <span id="product-stock-badge" class="px-2.5 py-0.5 rounded-full text-xs font-semibold ${inStock ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
+                        <span id="product-display-price" class="text-2xl font-extrabold text-gray-900">$${parseFloat(initialPrice).toFixed(2)}</span>
+                        <span id="product-stock-badge" class="px-2.5 py-0.5 rounded-full text-xs font-semibold ${inStock ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}">
                             ${inStock ? `In Stock (${initialStock} units)` : 'Out of Stock'}
                         </span>
                     </div>
@@ -301,31 +301,57 @@
                         ${p.description || 'No detailed description provided for this product.'}
                     </div>
 
+                    <!-- Variant Options Selector -->
+                    ${p.options && p.options.length > 0 ? `
+                        <div class="space-y-3 py-2 border-b border-gray-100">
+                            ${p.options.map(opt => `
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">${opt.name}:</label>
+                                    <div class="flex flex-wrap gap-2">
+                                        ${opt.values.map(val => `
+                                            <button type="button" 
+                                                    id="opt-btn-${opt.id}-${val.id}" 
+                                                    onclick="selectOption(${opt.id}, ${val.id})" 
+                                                    class="px-3.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${selectedOptions[opt.id] === val.id ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'}">
+                                                ${val.value}
+                                            </button>
+                                        `).join('')}
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : ''}
+
                     ${inStock ? `
                         <div class="space-y-4 pt-2">
+                            <!-- Stepper Quantity Selector -->
                             <div class="flex items-center space-x-3">
-                                <label for="quantity-input" class="text-sm font-medium text-gray-700">Quantity:</label>
-                                <input type="number" id="quantity-input" min="1" max="${p.stock}" value="1"
-                                       class="w-24 px-3 py-1.5 border border-gray-300 rounded-md text-sm text-center focus:ring-1 focus:ring-indigo-500 outline-none">
-                                <span class="text-xs text-gray-500">(Max: ${p.stock})</span>
+                                <label for="quantity-input" class="text-sm font-semibold text-gray-700">Quantity:</label>
+                                <div class="inline-flex items-center border border-gray-300 rounded-lg overflow-hidden bg-white">
+                                    <button type="button" onclick="stepQty(-1, ${p.stock})" class="px-3 py-1.5 text-gray-600 hover:bg-gray-100 font-bold transition-colors">-</button>
+                                    <input type="number" id="quantity-input" min="1" max="${p.stock}" value="1"
+                                           class="w-14 py-1.5 text-center text-sm font-semibold border-none outline-none text-gray-800">
+                                    <button type="button" onclick="stepQty(1, ${p.stock})" class="px-3 py-1.5 text-gray-600 hover:bg-gray-100 font-bold transition-colors">+</button>
+                                </div>
+                                <span id="quantity-max-label" class="text-xs text-gray-500">(Max: ${p.stock})</span>
                             </div>
 
                             <div class="flex items-center space-x-3">
                                 <button type="button" id="btn-add-detail" onclick="handleAddWithQuantity(${p.id}, ${p.stock})"
-                                        class="flex-1 py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-md shadow-sm transition-colors">
+                                        class="flex-1 py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-lg shadow-xs transition-colors">
                                     Add to Cart
                                 </button>
                                 <button type="button" onclick="addToWishlist(${p.id})"
-                                        class="py-2.5 px-4 border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-md transition-colors flex items-center space-x-1.5">
+                                        class="py-2.5 px-4 border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-semibold rounded-lg transition-colors flex items-center space-x-1.5">
                                     <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
                                     <span>Wishlist</span>
                                 </button>
                             </div>
 
-                            <a href="https://wa.me/{{ preg_replace('/[^0-9]/', '', config('whatsapp.support_phone', '18005550199')) }}?text=${encodeURIComponent('Hello! I would like to ask about product: ' + p.name + ' ($' + parseFloat(p.price).toFixed(2) + ')\n' + window.location.href)}"
+                            <a id="product-whatsapp-link" href="https://wa.me/{{ preg_replace('/[^0-9]/', '', config('whatsapp.support_phone', '18005550199')) }}?text=${encodeURIComponent('Hello! I would like to ask about product: ' + p.name + ' ($' + parseFloat(initialPrice).toFixed(2) + ')\n' + window.location.href)}"
                                target="_blank"
                                rel="noopener noreferrer"
-                               class="w-full py-2.5 px-4 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-sm font-semibold rounded-md transition-colors flex items-center justify-center space-x-2">
+                               class="w-full py-2.5 px-4 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-sm font-semibold rounded-lg transition-colors flex items-center justify-center space-x-2">
                                 <svg class="w-4 h-4 fill-[#25D366]" viewBox="0 0 24 24">
                                     <path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.77-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.312.045-.694.072-2.193-.55-1.915-.795-3.14-2.753-3.235-2.88-.095-.127-.778-1.034-.778-1.97 0-.936.491-1.396.666-1.587.175-.19.381-.238.508-.238.127 0 .254.001.365.006.118.005.276-.045.431.328.16.386.545 1.332.593 1.43.048.098.08.213.016.341-.064.127-.096.206-.191.318-.095.111-.2.249-.286.334-.095.095-.194.198-.083.389.111.19.493.813 1.058 1.317.728.649 1.341.85 1.531.945.19.095.302.079.413-.048.111-.127.476-.556.603-.746.127-.19.254-.159.429-.095.175.063 1.111.524 1.302.619.19.095.317.143.365.222.048.079.048.46-.096.865z"/>
                                 </svg>
@@ -335,13 +361,13 @@
                     ` : `
                         <div class="pt-2 space-y-2">
                             <button type="button" onclick="addToWishlist(${p.id})"
-                                    class="w-full py-2.5 px-4 border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-md transition-colors">
+                                    class="w-full py-2.5 px-4 border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-semibold rounded-lg transition-colors">
                                 Save to Wishlist
                             </button>
                             <a href="https://wa.me/{{ preg_replace('/[^0-9]/', '', config('whatsapp.support_phone', '18005550199')) }}?text=${encodeURIComponent('Hello! I would like to inquire about stock availability for: ' + p.name + '\n' + window.location.href)}"
                                target="_blank"
                                rel="noopener noreferrer"
-                               class="w-full py-2.5 px-4 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-sm font-semibold rounded-md transition-colors flex items-center justify-center space-x-2">
+                               class="w-full py-2.5 px-4 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-sm font-semibold rounded-lg transition-colors flex items-center justify-center space-x-2">
                                 <svg class="w-4 h-4 fill-[#25D366]" viewBox="0 0 24 24">
                                     <path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.77-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.312.045-.694.072-2.193-.55-1.915-.795-3.14-2.753-3.235-2.88-.095-.127-.778-1.034-.778-1.97 0-.936.491-1.396.666-1.587.175-.19.381-.238.508-.238.127 0 .254.001.365.006.118.005.276-.045.431.328.16.386.545 1.332.593 1.43.048.098.08.213.016.341-.064.127-.096.206-.191.318-.095.111-.2.249-.286.334-.095.095-.194.198-.083.389.111.19.493.813 1.058 1.317.728.649 1.341.85 1.531.945.19.095.302.079.413-.048.111-.127.476-.556.603-.746.127-.19.254-.159.429-.095.175.063 1.111.524 1.302.619.19.095.317.143.365.222.048.079.048.46-.096.865z"/>
                                 </svg>
@@ -458,6 +484,14 @@
         }
     }
 
+    function stepQty(delta, maxStock) {
+        const input = document.getElementById('quantity-input');
+        if (!input) return;
+        const current = parseInt(input.value) || 1;
+        const next = Math.max(1, Math.min(maxStock, current + delta));
+        input.value = next;
+    }
+
     async function handleAddWithQuantity(productId, maxStock) {
         if (!getAuthToken()) {
             showAlert('details-alert', 'Please login to add items to your cart.', 'warning');
@@ -473,32 +507,42 @@
             return;
         }
 
-        if (!getAuthToken()) {
-            showAlert('details-alert', 'Please log in to add items to your shopping cart.', 'warning');
-            setTimeout(() => window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname), 1200);
-            return;
-        }
-
         const btn = document.getElementById('btn-add-detail');
         if (btn) {
             btn.disabled = true;
             btn.textContent = 'Adding...';
         }
 
+        const payload = {
+            product_id: productId,
+            quantity: qty
+        };
+        if (currentVariant && currentVariant.id) {
+            payload.product_variant_id = currentVariant.id;
+        }
+
         const res = await apiFetch('/api/cart/items', {
             method: 'POST',
-            body: JSON.stringify({ product_id: productId, quantity: qty })
+            body: JSON.stringify(payload)
         });
-
-        if (btn) {
-            btn.disabled = false;
-            btn.textContent = 'Add to Cart';
-        }
 
         if (res.ok) {
             showAlert('details-alert', `Added ${qty} unit(s) to your shopping cart!`, 'success');
+            if (btn) {
+                btn.textContent = '✓ Added to Cart';
+                btn.className = 'flex-1 py-2.5 px-4 bg-emerald-600 text-white text-sm font-bold rounded-lg shadow-xs transition-colors';
+                setTimeout(() => {
+                    btn.disabled = false;
+                    btn.textContent = 'Add to Cart';
+                    btn.className = 'flex-1 py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-lg shadow-xs transition-colors';
+                }, 1500);
+            }
             fetchNavbarCounts(true);
         } else {
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = 'Add to Cart';
+            }
             showAlert('details-alert', res.data?.message || 'Failed to add item.', 'danger');
         }
     }

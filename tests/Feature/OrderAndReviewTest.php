@@ -257,6 +257,21 @@ class OrderAndReviewTest extends TestCase
 
     public function test_product_reviews_creation_and_listing(): void
     {
+        // Simulate verified purchase
+        $order = Order::create([
+            'user_id'      => $this->user1->id,
+            'address_id'   => $this->address1->id,
+            'status'       => 'delivered',
+            'total_amount' => 100.00,
+        ]);
+
+        $order->items()->create([
+            'product_id'   => $this->product->id,
+            'product_name' => $this->product->name,
+            'quantity'     => 1,
+            'price'        => 100.00,
+        ]);
+
         // 1. Post a review
         $postRes = $this->withHeader('Authorization', "Bearer {$this->token1}")
             ->postJson("/api/products/{$this->product->id}/reviews", [
@@ -273,6 +288,20 @@ class OrderAndReviewTest extends TestCase
             ->assertJsonPath('data.total_reviews', 1)
             ->assertJsonPath('data.average_rating', 5)
             ->assertJsonPath('data.reviews.0.user.name', 'Alice');
+    }
+
+    public function test_unverified_user_cannot_submit_review(): void
+    {
+        // User 2 has NOT ordered the product
+        $res = $this->withHeader('Authorization', "Bearer {$this->token2}")
+            ->postJson("/api/products/{$this->product->id}/reviews", [
+                'rating' => 1,
+                'comment' => 'Spam fake review',
+            ]);
+
+        $res->assertStatus(403)
+            ->assertJsonPath('success', false)
+            ->assertJsonPath('message', 'Only verified purchasers can submit a review for this product.');
     }
 
     public function test_user_cannot_delete_another_users_review(): void

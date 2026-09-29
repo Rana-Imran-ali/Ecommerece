@@ -251,6 +251,30 @@
                                 <input type="text" id="transaction-reference" placeholder="e.g. TRX-20240910-XYZ123"
                                        class="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm font-mono outline-none focus:ring-2 focus:ring-emerald-400 focus:border-transparent transition">
                             </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-600 mb-1">Payment Proof / Bank Slip <span class="text-red-500">*</span></label>
+                                <div id="proof-upload-area" class="relative border-2 border-dashed border-emerald-300 rounded-lg p-4 text-center cursor-pointer hover:border-emerald-500 hover:bg-emerald-50/40 transition-all duration-200">
+                                    <input type="file" id="payment-proof"
+                                           accept="image/png,image/jpeg,image/jpg,image/webp,application/pdf"
+                                           class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                                           onchange="handleProofFileSelected(this)">
+                                    <div id="proof-placeholder">
+                                        <div class="text-2xl mb-1">📎</div>
+                                        <p class="text-xs font-semibold text-emerald-700">Click to upload receipt / bank slip</p>
+                                        <p class="text-[11px] text-gray-400 mt-0.5">JPG, PNG, WEBP, or PDF — max 5MB</p>
+                                    </div>
+                                    <div id="proof-preview" class="hidden items-center gap-3 text-left">
+                                        <div class="text-2xl" id="proof-file-icon">🖼️</div>
+                                        <div class="flex-1 min-w-0">
+                                            <p id="proof-file-name" class="text-xs font-semibold text-gray-800 truncate"></p>
+                                            <p id="proof-file-size" class="text-[11px] text-gray-400"></p>
+                                        </div>
+                                        <button type="button" onclick="clearProofFile(event)"
+                                                class="text-red-400 hover:text-red-600 text-lg font-bold leading-none flex-shrink-0">×</button>
+                                    </div>
+                                </div>
+                                <p id="proof-error" class="text-[11px] text-red-500 mt-1 hidden">Please attach your payment receipt before submitting.</p>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -753,14 +777,19 @@
         // Step 3: Create the order, referencing the confirmed PaymentIntent
         btn.textContent = '⟳ Confirming order...';
 
+        const subtotalForCard = parseFloat(checkoutCart.subtotal || 0);
+        const discountForCard = appliedCoupon ? parseFloat(appliedCoupon.discount_amount || 0) : 0;
+        const expectedTotalCard = Math.max(0, subtotalForCard - discountForCard).toFixed(2);
+
         const orderRes = await apiFetch('/api/orders', {
             method: 'POST',
             body:   JSON.stringify({
-                address_id:              parseInt(addrInput.value),
-                customer_email:          customerEmail,
-                payment_method:          'card',
-                coupon_code:             appliedCoupon ? appliedCoupon.code : null,
+                address_id:               parseInt(addrInput.value),
+                customer_email:           customerEmail,
+                payment_method:           'card',
+                coupon_code:              appliedCoupon ? appliedCoupon.code : null,
                 stripe_payment_intent_id: paymentIntent.id,
+                expected_total:           parseFloat(expectedTotalCard),
             })
         });
 
@@ -781,12 +810,62 @@
         }
     }
 
+    // ── Payment Proof File Helpers ─────────────────────────────────────────
+    function handleProofFileSelected(input) {
+        const file = input.files?.[0];
+        if (!file) return;
+
+        const maxBytes = 5 * 1024 * 1024; // 5MB
+        const allowed  = ['image/png','image/jpeg','image/jpg','image/webp','application/pdf'];
+
+        if (!allowed.includes(file.type)) {
+            input.value = '';
+            document.getElementById('proof-error').textContent = 'Invalid file type. Please upload JPG, PNG, WEBP, or PDF.';
+            document.getElementById('proof-error').classList.remove('hidden');
+            return;
+        }
+        if (file.size > maxBytes) {
+            input.value = '';
+            document.getElementById('proof-error').textContent = 'File is too large. Maximum size is 5MB.';
+            document.getElementById('proof-error').classList.remove('hidden');
+            return;
+        }
+
+        // Show preview
+        document.getElementById('proof-error').classList.add('hidden');
+        document.getElementById('proof-placeholder').classList.add('hidden');
+        const preview = document.getElementById('proof-preview');
+        preview.classList.remove('hidden');
+        preview.classList.add('flex');
+        document.getElementById('proof-file-icon').textContent = file.type === 'application/pdf' ? '📄' : '🖼️';
+        document.getElementById('proof-file-name').textContent = file.name;
+        document.getElementById('proof-file-size').textContent = (file.size / 1024).toFixed(1) + ' KB';
+        document.getElementById('proof-upload-area').classList.remove('border-dashed','border-emerald-300');
+        document.getElementById('proof-upload-area').classList.add('border-solid','border-emerald-500','bg-emerald-50');
+    }
+
+    function clearProofFile(e) {
+        e.stopPropagation();
+        const input = document.getElementById('payment-proof');
+        input.value = '';
+        document.getElementById('proof-placeholder').classList.remove('hidden');
+        const preview = document.getElementById('proof-preview');
+        preview.classList.add('hidden');
+        preview.classList.remove('flex');
+        document.getElementById('proof-upload-area').classList.add('border-dashed','border-emerald-300');
+        document.getElementById('proof-upload-area').classList.remove('border-solid','border-emerald-500','bg-emerald-50');
+        document.getElementById('proof-error').classList.add('hidden');
+    }
+
     // ── Bank Transfer Checkout ─────────────────────────────────────────────
     async function handleBankTransferCheckout(addrInput, btn, customerEmail) {
         const senderBank = document.getElementById('sender-bank')?.value?.trim();
         const senderName = document.getElementById('sender-name')?.value?.trim();
         const txRef      = document.getElementById('transaction-reference')?.value?.trim();
+        const proofInput = document.getElementById('payment-proof');
+        const proofFile  = proofInput?.files?.[0];
 
+        // Validate text fields
         if (!senderBank || !senderName || !txRef) {
             btn.disabled    = false;
             btn.textContent = 'Submit Transfer & Place Order';
@@ -794,17 +873,37 @@
             return;
         }
 
+        // Validate file upload
+        if (!proofFile) {
+            btn.disabled    = false;
+            btn.textContent = 'Submit Transfer & Place Order';
+            document.getElementById('proof-error').textContent = 'Please attach your payment receipt before submitting.';
+            document.getElementById('proof-error').classList.remove('hidden');
+            document.getElementById('proof-upload-area').classList.add('border-red-400');
+            showAlert('checkout-alert', 'Please upload your bank transfer receipt / payment slip.', 'danger');
+            return;
+        }
+
+        // Build multipart FormData to carry the file
+        const subtotalForBank = parseFloat(checkoutCart.subtotal || 0);
+        const discountForBank = appliedCoupon ? parseFloat(appliedCoupon.discount_amount || 0) : 0;
+        const expectedTotalBank = Math.max(0, subtotalForBank - discountForBank).toFixed(2);
+
+        const formData = new FormData();
+        formData.append('address_id',            addrInput.value);
+        formData.append('payment_method',        'bank_transfer');
+        formData.append('sender_bank',           senderBank);
+        formData.append('sender_name',           senderName);
+        formData.append('transaction_reference', txRef);
+        formData.append('payment_proof',         proofFile, proofFile.name);
+        formData.append('expected_total',        expectedTotalBank);
+        if (customerEmail)  formData.append('customer_email', customerEmail);
+        if (appliedCoupon)  formData.append('coupon_code',    appliedCoupon.code);
+
+        // apiFetch will detect FormData and NOT set Content-Type (browser sets multipart boundary automatically)
         const res = await apiFetch('/api/orders', {
             method: 'POST',
-            body:   JSON.stringify({
-                address_id:           parseInt(addrInput.value),
-                customer_email:       customerEmail,
-                payment_method:       'bank_transfer',
-                coupon_code:          appliedCoupon ? appliedCoupon.code : null,
-                sender_bank:          senderBank,
-                sender_name:          senderName,
-                transaction_reference: txRef,
-            })
+            body:   formData,
         });
 
         btn.disabled    = false;
@@ -812,7 +911,7 @@
 
         if (res.ok && res.data?.data?.id) {
             fetchNavbarCounts();
-            showAlert('checkout-alert', '✓ Order placed! Your transfer reference has been recorded. We\'ll verify and process your order soon.', 'success');
+            showAlert('checkout-alert', '✓ Order placed! Your payment receipt has been uploaded. We\'ll verify and process your order soon.', 'success');
             setTimeout(() => window.location.href = `/orders/${res.data.data.id}`, 1200);
         } else {
             throw new Error(res.data?.message || 'Failed to place order.');
@@ -821,6 +920,10 @@
 
     // ── COD Checkout ──────────────────────────────────────────────────────
     async function handleCodCheckout(addrInput, btn, customerEmail) {
+        const subtotalForCod = parseFloat(checkoutCart.subtotal || 0);
+        const discountForCod = appliedCoupon ? parseFloat(appliedCoupon.discount_amount || 0) : 0;
+        const expectedTotalCod = Math.max(0, subtotalForCod - discountForCod).toFixed(2);
+
         const res = await apiFetch('/api/orders', {
             method: 'POST',
             body:   JSON.stringify({
@@ -828,6 +931,7 @@
                 customer_email: customerEmail,
                 payment_method: 'cod',
                 coupon_code:    appliedCoupon ? appliedCoupon.code : null,
+                expected_total: parseFloat(expectedTotalCod),
             })
         });
 

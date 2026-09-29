@@ -171,9 +171,8 @@
 
         summary.textContent = 'Searching catalog...';
         grid.innerHTML = `
-            <div class="col-span-full py-12 flex justify-center items-center space-x-3 text-gray-500">
-                <div class="animate-spin w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full"></div>
-                <span class="text-sm">Fetching products...</span>
+            <div class="col-span-full py-12 flex justify-center items-center text-gray-500">
+                <span class="text-sm font-medium">Fetching matching products...</span>
             </div>
         `;
         emptyState.classList.add('hidden');
@@ -200,37 +199,41 @@
 
             products.forEach(p => {
                 const rawImg = p.primary_image?.image || (p.images && p.images.length > 0 ? (p.images.find(i => i.is_primary)?.image || p.images[0].image) : null);
-                const imgSrc = rawImg ? (rawImg.startsWith('http') ? rawImg : `/storage/${rawImg.replace(/^\/+/, '')}`) : 'https://placehold.co/400x300/e0e7ff/4f46e5?text=No+Image';
+                const imgSrc = rawImg ? (rawImg.startsWith('http') ? rawImg : `/storage/${rawImg.replace(/^\/+/, '')}`) : null;
 
-                const inStock = p.stock > 0;
+                const inStock = (p.stock ?? 0) > 0;
                 const card = document.createElement('div');
-                card.className = 'bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm hover:shadow-md transition-shadow flex flex-col group';
+                card.className = 'bg-white rounded-xl border border-gray-200 overflow-hidden shadow-xs flex flex-col justify-between';
                 card.innerHTML = `
-                    <div class="relative h-48 bg-gray-50 overflow-hidden">
-                        <img src="${imgSrc}" alt="${escapeHtml(p.name)}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">
-                        ${!inStock ? '<span class="absolute top-2 right-2 px-2 py-1 text-xs font-bold text-white bg-red-500 rounded-md">Out of Stock</span>' : ''}
-                    </div>
-                    <div class="p-4 flex-1 flex flex-col justify-between">
-                        <div>
-                            <div class="text-xs font-semibold text-indigo-600 uppercase tracking-wider mb-1">
+                    <div>
+                        <div class="relative h-48 bg-gray-50 flex items-center justify-center overflow-hidden">
+                            ${imgSrc 
+                                ? `<img src="${imgSrc}" alt="${escapeHtml(p.name)}" class="w-full h-full object-cover">`
+                                : `<span class="text-xs text-gray-400">No Image</span>`}
+                            ${!inStock ? '<span class="absolute top-2 right-2 px-2 py-0.5 text-[11px] font-bold text-white bg-red-500 rounded-md">Out of Stock</span>' : ''}
+                        </div>
+                        <div class="p-4">
+                            <div class="text-[11px] font-semibold text-indigo-600 uppercase tracking-wider mb-1">
                                 ${p.category?.name || 'General'}
                             </div>
-                            <h3 class="font-bold text-gray-900 line-clamp-1 group-hover:text-indigo-600 transition-colors">
-                                ${escapeHtml(p.name)}
+                            <h3 class="font-bold text-sm text-gray-900 line-clamp-1">
+                                <a href="/products/${p.id}" class="hover:text-indigo-600 transition-colors">${escapeHtml(p.name)}</a>
                             </h3>
                             <p class="text-xs text-gray-500 mt-1 line-clamp-2">
                                 ${escapeHtml(p.description || '')}
                             </p>
                         </div>
-                        <div class="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between">
+                    </div>
+                    <div class="p-4 pt-0">
+                        <div class="pt-3 border-t border-gray-100 flex items-center justify-between">
                             <div>
-                                <span class="text-lg font-black text-gray-900">$${parseFloat(p.price).toFixed(2)}</span>
+                                <span class="text-base font-extrabold text-gray-900">$${parseFloat(p.price).toFixed(2)}</span>
                             </div>
                             <div class="flex items-center space-x-2">
                                 <a href="/products/${p.id}" class="p-2 text-gray-500 hover:text-indigo-600 border border-gray-200 rounded-lg hover:border-indigo-300 transition-colors" title="View details">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
                                 </a>
-                                <button type="button" onclick="quickAddToCart(${p.id})" ${p.stock_quantity <= 0 ? 'disabled' : ''} class="px-3 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 rounded-lg transition-colors">
+                                <button type="button" id="btn-search-add-${p.id}" onclick="quickAddToCart(${p.id})" ${!inStock ? 'disabled' : ''} class="px-3 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 rounded-lg transition-colors">
                                     Add
                                 </button>
                             </div>
@@ -247,6 +250,18 @@
     }
 
     async function quickAddToCart(productId) {
+        if (!getAuthToken()) {
+            showToast('Please sign in to add items to cart.', 'error');
+            setTimeout(() => { window.location.href = '/login?redirect=/search'; }, 1000);
+            return;
+        }
+
+        const btn = document.getElementById(`btn-search-add-${productId}`);
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = '...';
+        }
+
         try {
             const res = await apiFetch('/api/cart/items', {
                 method: 'POST',
@@ -254,12 +269,29 @@
             });
             if (res.ok) {
                 showToast('Product added to cart!', 'success');
+                if (btn) {
+                    btn.textContent = '✓';
+                    btn.className = 'px-3 py-1.5 text-xs font-bold text-white bg-emerald-600 rounded-lg transition-colors';
+                    setTimeout(() => {
+                        btn.disabled = false;
+                        btn.textContent = 'Add';
+                        btn.className = 'px-3 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors';
+                    }, 1500);
+                }
                 if (typeof fetchNavbarCounts === 'function') fetchNavbarCounts(true);
             } else {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = 'Add';
+                }
                 showToast(res.data?.message || 'Could not add to cart', 'error');
             }
         } catch (e) {
-            showToast('Please login to add items to cart.', 'error');
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = 'Add';
+            }
+            showToast('Could not complete request.', 'error');
         }
     }
 

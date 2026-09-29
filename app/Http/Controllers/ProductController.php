@@ -28,10 +28,15 @@ class ProductController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $query = Product::query()->with([
-            'category:id,name',
-            'primaryImage:id,product_id,image',
-        ]);
+        // Only show active, non-deleted products to storefront customers.
+        // SoftDeletes global scope already excludes deleted_at rows;
+        // this where() adds the missing status gate.
+        $query = Product::query()
+            ->where('status', 'active')
+            ->with([
+                'category:id,name',
+                'primaryImage:id,product_id,image',
+            ]);
 
         // Search by product name or description
         if ($request->filled('search')) {
@@ -142,6 +147,14 @@ class ProductController extends Controller
      */
     public function show(Product $product): JsonResponse
     {
+        // Reject soft-deleted or inactive products for storefront access.
+        if ($product->status !== 'active') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Product not found.',
+            ], Response::HTTP_NOT_FOUND);
+        }
+
         $product->load(['category', 'images', 'options.values', 'variants.optionValues.option']);
 
         return response()->json([

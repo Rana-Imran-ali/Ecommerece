@@ -55,7 +55,7 @@ class CartController extends Controller
         $validated = $request->validate([
             'product_id'         => ['required', 'integer', 'exists:products,id'],
             'product_variant_id' => ['nullable', 'integer', 'exists:product_variants,id'],
-            'quantity'           => ['required', 'integer', 'min:1'],
+            'quantity'           => ['required', 'integer', 'min:1', 'max:99'],
         ]);
 
         $product = Product::findOrFail($validated['product_id']);
@@ -94,6 +94,13 @@ class CartController extends Controller
         if ($item) {
             $newQuantity = $item->quantity + $validated['quantity'];
 
+            if ($newQuantity > 99) {
+                return response()->json([
+                    'success' => false,
+                    'message' => "Cannot add more. Maximum allowed quantity per product item is 99 (already have {$item->quantity} in cart).",
+                ], Response::HTTP_UNPROCESSABLE_ENTITY);
+            }
+
             if ($newQuantity > $availableStock) {
                 return response()->json([
                     'success' => false,
@@ -126,7 +133,7 @@ class CartController extends Controller
     public function update(Request $request, CartItem $cartItem): JsonResponse
     {
         $validated = $request->validate([
-            'quantity' => ['required', 'integer', 'min:1'],
+            'quantity' => ['required', 'integer', 'min:1', 'max:99'],
         ]);
 
         $cart = Cart::where('id', $cartItem->cart_id)

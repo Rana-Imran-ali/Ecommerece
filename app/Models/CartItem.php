@@ -21,11 +21,13 @@ class CartItem extends Model
 
     public function product(): BelongsTo
     {
-        return $this->belongsTo(Product::class);
+        // withTrashed() ensures soft-deleted products still resolve in cart/checkout
+        // so we can surface a "no longer available" error rather than a null crash.
+        return $this->belongsTo(Product::class)->withTrashed();
     }
 
     public function variant(): BelongsTo
     {
-        return $this->belongsTo(ProductVariant::class, 'product_variant_id');
+        return $this->belongsTo(ProductVariant::class, 'product_variant_id')->withTrashed();
     }
 }

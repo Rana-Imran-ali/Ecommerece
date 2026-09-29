@@ -103,13 +103,13 @@
     let totalPages = 1;
     let categoriesLoaded = false;
 
-    // Render skeleton placeholders to avoid layout shift
+    // Render static placeholder to prevent layout shift without distracting animations
     function renderSkeletons(count = 8) {
         const container = document.getElementById('products-container');
         container.innerHTML = Array.from({ length: count }).map(() => `
-            <div class="bg-white rounded-lg border border-gray-200 overflow-hidden flex flex-col justify-between animate-pulse">
+            <div class="bg-white rounded-xl border border-gray-200 overflow-hidden flex flex-col justify-between">
                 <div>
-                    <div class="h-48 w-full bg-gray-200"></div>
+                    <div class="h-48 w-full bg-gray-100 flex items-center justify-center text-xs text-gray-400">Loading item...</div>
                     <div class="p-4 space-y-2.5">
                         <div class="h-3 bg-gray-200 rounded w-1/3"></div>
                         <div class="h-4 bg-gray-200 rounded w-3/4"></div>
@@ -118,10 +118,10 @@
                 </div>
                 <div class="p-4 pt-0 border-t border-gray-100 mt-2 space-y-2">
                     <div class="flex space-x-2 pt-2">
-                        <div class="h-7 bg-gray-200 rounded flex-1"></div>
-                        <div class="h-7 w-8 bg-gray-200 rounded"></div>
+                        <div class="h-7 bg-gray-100 rounded flex-1"></div>
+                        <div class="h-7 w-8 bg-gray-100 rounded"></div>
                     </div>
-                    <div class="h-8 bg-gray-200 rounded w-full"></div>
+                    <div class="h-8 bg-gray-100 rounded w-full"></div>
                 </div>
             </div>
         `).join('');
@@ -168,7 +168,7 @@
 
         if (!res.ok) {
             container.innerHTML = `
-                <div class="col-span-full p-8 text-center bg-white rounded-lg border border-red-200 text-red-600">
+                <div class="col-span-full p-8 text-center bg-white rounded-xl border border-red-200 text-red-600">
                     Failed to load products. ${res.data?.message || 'Server error.'}
                 </div>
             `;
@@ -189,9 +189,9 @@
 
         if (products.length === 0) {
             container.innerHTML = `
-                <div class="col-span-full p-12 text-center bg-white rounded-lg border border-gray-200 text-gray-500">
-                    <p class="text-base font-medium text-gray-700">No products found</p>
-                    <p class="text-sm mt-1">Try adjusting your search keywords or category filters.</p>
+                <div class="col-span-full p-12 text-center bg-white rounded-xl border border-gray-200 text-gray-500">
+                    <p class="text-base font-semibold text-gray-800">No products found</p>
+                    <p class="text-xs text-gray-500 mt-1">Try adjusting your search keywords or category filters.</p>
                 </div>
             `;
             paginationContainer.classList.add('hidden');
@@ -205,11 +205,11 @@
             
             const inStock = product.stock > 0;
             const stockBadge = inStock
-                ? `<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">In Stock (${product.stock})</span>`
-                : `<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">Out of Stock</span>`;
+                ? `<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-100 text-emerald-800">In Stock (${product.stock})</span>`
+                : `<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-red-100 text-red-800">Out of Stock</span>`;
 
             return `
-                <div class="bg-white rounded-lg border border-gray-200 overflow-hidden flex flex-col justify-between hover:border-gray-300 hover:shadow-sm transition-all">
+                <div class="bg-white rounded-xl border border-gray-200 overflow-hidden flex flex-col justify-between hover:border-gray-300 shadow-xs">
                     <div>
                         <!-- Image Container -->
                         <div class="h-48 w-full bg-gray-100 flex items-center justify-center relative overflow-hidden">
@@ -221,13 +221,13 @@
 
                         <!-- Info -->
                         <div class="p-4">
-                            <div class="text-xs text-indigo-600 font-semibold uppercase tracking-wider mb-1">
+                            <div class="text-[11px] text-indigo-600 font-semibold uppercase tracking-wider mb-1">
                                 ${product.category?.name || 'Uncategorized'}
                             </div>
-                            <h3 class="text-base font-bold text-gray-900 line-clamp-1" title="${product.name}">
-                                ${product.name}
+                            <h3 class="text-sm font-bold text-gray-900 line-clamp-1" title="${product.name}">
+                                <a href="/products/${product.id}" class="hover:text-indigo-600 transition-colors">${product.name}</a>
                             </h3>
-                            <div class="mt-2 text-lg font-bold text-gray-900">
+                            <div class="mt-2 text-base font-extrabold text-gray-900">
                                 $${parseFloat(product.price).toFixed(2)}
                             </div>
                         </div>
@@ -236,10 +236,10 @@
                     <!-- Actions -->
                     <div class="p-4 pt-0 border-t border-gray-100 mt-2 flex flex-col gap-2">
                         <div class="flex items-center space-x-2 pt-2">
-                            <a href="/products/${product.id}" class="flex-1 text-center py-1.5 px-3 bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-semibold rounded transition-colors">
+                            <a href="/products/${product.id}" class="flex-1 text-center py-1.5 px-3 bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-semibold rounded-md transition-colors">
                                 Details
                             </a>
-                            <button type="button" onclick="addToWishlist(${product.id})" class="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded border border-gray-200 transition-colors" title="Add to Wishlist">
+                            <button type="button" onclick="addToWishlist(${product.id})" class="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-md border border-gray-200 transition-colors" title="Add to Wishlist">
                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
                             </button>
                         </div>
@@ -247,7 +247,7 @@
                                 id="btn-add-${product.id}"
                                 onclick="addToCart(${product.id})" 
                                 ${!inStock ? 'disabled' : ''}
-                                class="w-full py-2 px-3 text-xs font-bold rounded text-white transition-colors ${inStock ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-gray-300 cursor-not-allowed'}">
+                                class="w-full py-2 px-3 text-xs font-bold rounded-md text-white transition-colors ${inStock ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-gray-300 cursor-not-allowed'}">
                             ${inStock ? 'Add to Cart' : 'Out of Stock'}
                         </button>
                     </div>
@@ -352,15 +352,23 @@
             body: JSON.stringify({ product_id: productId, quantity: 1 })
         });
 
-        if (btn) {
-            btn.disabled = false;
-            btn.textContent = 'Add to Cart';
-        }
-
         if (res.ok) {
             showAlert('product-alert', 'Product added to cart successfully!', 'success');
+            if (btn) {
+                btn.textContent = '✓ Added to Cart';
+                btn.className = 'w-full py-2 px-3 text-xs font-bold rounded-md text-white bg-emerald-600 transition-colors';
+                setTimeout(() => {
+                    btn.disabled = false;
+                    btn.textContent = 'Add to Cart';
+                    btn.className = 'w-full py-2 px-3 text-xs font-bold rounded-md text-white bg-indigo-600 hover:bg-indigo-700 transition-colors';
+                }, 1500);
+            }
             fetchNavbarCounts(true);
         } else {
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = 'Add to Cart';
+            }
             showAlert('product-alert', res.data?.message || 'Failed to add to cart.', 'danger');
         }
     }

@@ -11,6 +11,26 @@ use Symfony\Component\HttpFoundation\Response;
 class AddressController extends Controller
 {
     /**
+     * Resolve an address that belongs to the authenticated user.
+     * Returns null if the address doesn't exist or doesn't belong to the user,
+     * preventing IDOR by never binding an address that isn't owned by the caller.
+     */
+    private function resolveOwnedAddress(Request $request, int $addressId): ?Address
+    {
+        return Address::where('id', $addressId)
+            ->where('user_id', $request->user()->id)
+            ->first();
+    }
+
+    private function notFound(): JsonResponse
+    {
+        return response()->json([
+            'success' => false,
+            'message' => 'Address not found.',
+        ], Response::HTTP_NOT_FOUND);
+    }
+
+    /**
      * Display a listing of the user's addresses.
      */
     public function index(Request $request): JsonResponse
@@ -76,61 +96,52 @@ class AddressController extends Controller
     /**
      * Update the specified address.
      */
-    public function update(Request $request, Address $address): JsonResponse
+    public function update(Request $request, int $address): JsonResponse
     {
-        if ($address->user_id !== $request->user()->id) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Address not found.',
-            ], Response::HTTP_NOT_FOUND);
-        }
+        $addr = $this->resolveOwnedAddress($request, $address);
+        if (!$addr) return $this->notFound();
 
         $validated = $request->validate([
-            'name' => ['sometimes', 'required', 'string', 'max:255'],
-            'phone' => ['sometimes', 'required', 'string', 'max:50'],
+            'name'          => ['sometimes', 'required', 'string', 'max:255'],
+            'phone'         => ['sometimes', 'required', 'string', 'max:50'],
             'address_line1' => ['sometimes', 'required', 'string', 'max:255'],
             'address_line2' => ['nullable', 'string', 'max:255'],
-            'city' => ['sometimes', 'required', 'string', 'max:100'],
-            'state' => ['sometimes', 'required', 'string', 'max:100'],
-            'postal_code' => ['sometimes', 'required', 'string', 'max:20'],
-            'country' => ['sometimes', 'required', 'string', 'max:100'],
-            'is_default' => ['nullable', 'boolean'],
+            'city'          => ['sometimes', 'required', 'string', 'max:100'],
+            'state'         => ['sometimes', 'required', 'string', 'max:100'],
+            'postal_code'   => ['sometimes', 'required', 'string', 'max:20'],
+            'country'       => ['sometimes', 'required', 'string', 'max:100'],
+            'is_default'    => ['nullable', 'boolean'],
         ]);
 
         $userId = $request->user()->id;
 
-        DB::transaction(function () use ($address, $userId, $validated) {
+        DB::transaction(function () use ($addr, $userId, $validated) {
             if (!empty($validated['is_default'])) {
                 Address::where('user_id', $userId)->update(['is_default' => false]);
             }
-
-            $address->update($validated);
+            $addr->update($validated);
         });
 
         return response()->json([
             'success' => true,
             'message' => 'Address updated successfully.',
-            'data' => $address,
+            'data'    => $addr->fresh(),
         ], Response::HTTP_OK);
     }
 
     /**
      * Delete the specified address.
      */
-    public function destroy(Request $request, Address $address): JsonResponse
+    public function destroy(Request $request, int $address): JsonResponse
     {
-        if ($address->user_id !== $request->user()->id) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Address not found.',
-            ], Response::HTTP_NOT_FOUND);
-        }
+        $addr = $this->resolveOwnedAddress($request, $address);
+        if (!$addr) return $this->notFound();
 
-        $userId = $request->user()->id;
-        $wasDefault = $address->is_default;
+        $userId     = $request->user()->id;
+        $wasDefault = $addr->is_default;
 
-        DB::transaction(function () use ($address, $userId, $wasDefault) {
-            $address->delete();
+        DB::transaction(function () use ($addr, $userId, $wasDefault) {
+            $addr->delete();
 
             if ($wasDefault) {
                 $nextDefault = Address::where('user_id', $userId)->first();
@@ -149,26 +160,22 @@ class AddressController extends Controller
     /**
      * Set a specific address as the default.
      */
-    public function setDefault(Request $request, Address $address): JsonResponse
+    public function setDefault(Request $request, int $address): JsonResponse
     {
-        if ($address->user_id !== $request->user()->id) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Address not found.',
-            ], Response::HTTP_NOT_FOUND);
-        }
+        $addr = $this->resolveOwnedAddress($request, $address);
+        if (!$addr) return $this->notFound();
 
         $userId = $request->user()->id;
 
-        DB::transaction(function () use ($address, $userId) {
+        DB::transaction(function () use ($addr, $userId) {
             Address::where('user_id', $userId)->update(['is_default' => false]);
-            $address->update(['is_default' => true]);
+            $addr->update(['is_default' => true]);
         });
 
         return response()->json([
             'success' => true,
             'message' => 'Default address updated.',
-            'data' => $address,
+            'data'    => $addr->fresh(),
         ], Response::HTTP_OK);
     }
 }

@@ -138,6 +138,7 @@ class OrderController extends Controller
                 'customer_email' => ['nullable', 'email', 'max:255'],
                 'payment_method' => ['required', 'string', 'in:cod,bank_transfer,card'],
                 'coupon_code'    => ['nullable', 'string'],
+                'expected_total' => ['nullable', 'numeric', 'min:0'],
             ];
 
         // ── 2. Per-method additional validation rules ─────────────────────────
@@ -145,10 +146,11 @@ class OrderController extends Controller
             // Card: require the confirmed Stripe PaymentIntent ID (client confirms card via Stripe.js first)
             $baseRules['stripe_payment_intent_id'] = ['required', 'string', 'starts_with:pi_'];
         } elseif ($paymentMethod === 'bank_transfer') {
-            // Bank Transfer: require sender details and transaction reference
-            $baseRules['sender_bank']           = ['required', 'string', 'max:100'];
-            $baseRules['sender_name']           = ['required', 'string', 'max:150'];
-            $baseRules['transaction_reference'] = ['required', 'string', 'max:100'];
+            // Bank Transfer: require sender details, strict format validation, and payment proof file
+            $baseRules['sender_bank']           = ['required', 'string', 'min:2', 'max:100', 'regex:/^[\pL\s\.\,\-\&]+$/u'];
+            $baseRules['sender_name']           = ['required', 'string', 'min:2', 'max:150', 'regex:/^[\pL\s\.\,\'\-]+$/u'];
+            $baseRules['transaction_reference'] = ['required', 'string', 'min:5', 'max:100', 'regex:/^[A-Za-z0-9\-\_]+$/'];
+            $baseRules['payment_proof']         = ['required', 'file', 'mimes:jpeg,jpg,png,webp,pdf', 'max:5120']; // max 5 MB
         }
 
         $validated = $request->validate($baseRules);
@@ -268,9 +270,18 @@ class OrderController extends Controller
             }
         } elseif ($paymentMethod === 'bank_transfer') {
             $transactionReference = $validated['transaction_reference'];
+
+            // Store the uploaded payment proof/receipt file
+            $proofPath = null;
+            if ($request->hasFile('payment_proof')) {
+                $proofPath = $request->file('payment_proof')->store('payment_proofs', 'public');
+            }
+
             $paymentDetails = [
-                'sender_bank' => $validated['sender_bank'],
-                'sender_name' => $validated['sender_name'],
+                'sender_bank'         => $validated['sender_bank'],
+                'sender_name'         => $validated['sender_name'],
+                'proof_path'          => $proofPath,
+                'proof_original_name' => $request->file('payment_proof')?->getClientOriginalName(),
             ];
         }
 
@@ -319,6 +330,23 @@ class OrderController extends Controller
         }
 
         $totalAmount = round($subtotal - $discountAmount, 2);
+
+        // ── 7b. Cart Price Drift Protection ──────────────────────────────────
+        // Ensure the customer isn't charged a different price if catalog prices
+        // or promotions changed while items sat in their cart or checkout screen.
+        if (isset($validated['expected_total']) && $validated['expected_total'] !== null) {
+            $expectedTotal = (float) $validated['expected_total'];
+            if (abs($expectedTotal - $totalAmount) > 0.05) {
+                return response()->json([
+                    'success' => false,
+                    'message' => "Price update detected: The cart total has changed from $" . number_format($expectedTotal, 2) . " to $" . number_format($totalAmount, 2) . " due to updated product pricing. Please review the updated total before confirming your order.",
+                    'data'    => [
+                        'expected_total' => $expectedTotal,
+                        'current_total'  => $totalAmount,
+                    ],
+                ], Response::HTTP_UNPROCESSABLE_ENTITY);
+            }
+        }
 
         // ── 8. Card payment: verify amount consistency ────────────────────────
         if ($paymentMethod === 'card' && isset($intent)) {
@@ -385,7 +413,15 @@ class OrderController extends Controller
 
                             $variantBeforeStock = (int) $variant->stock;
                             $variantAfterStock  = $variantBeforeStock - $cartItem->quantity;
-                            $variant->update(['stock' => $variantAfterStock]);
+
+                            // Atomic conditional decrement: guarantees stock >= quantity at the database engine level
+                            $affected = ProductVariant::where('id', $variant->id)
+                                ->where('stock', '>=', $cartItem->quantity)
+                                ->decrement('stock', $cartItem->quantity);
+
+                            if (!$affected) {
+                                throw new \RuntimeException("Insufficient stock for '{$cartItem->product->name} ({$variantName})'.");
+                            }
 
                             // Variant-based items: only deduct variant stock — do NOT touch parent product stock.
                             // Parent product.stock is a display-level aggregate; variant stock is the true inventory.
@@ -396,10 +432,17 @@ class OrderController extends Controller
                                 throw new \RuntimeException("Insufficient stock for '{$cartItem->product->name}'. Available: " . ($product->stock ?? 0));
                             }
 
-                            // No variant: deduct directly from parent product stock.
+                            // No variant: deduct directly from parent product stock with atomic conditional decrement
                             $beforeStock = (int) $product->stock;
-                            $afterStock  = max(0, $beforeStock - $cartItem->quantity);
-                            $product->update(['stock' => $afterStock]);
+                            $afterStock  = $beforeStock - $cartItem->quantity;
+
+                            $affected = Product::where('id', $product->id)
+                                ->where('stock', '>=', $cartItem->quantity)
+                                ->decrement('stock', $cartItem->quantity);
+
+                            if (!$affected) {
+                                throw new \RuntimeException("Insufficient stock for '{$cartItem->product->name}'.");
+                            }
                         }
 
                         OrderItem::create([

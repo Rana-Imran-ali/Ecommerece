@@ -302,4 +302,71 @@ class CouponSystemTest extends TestCase
             'max_uses' => 50,
         ]);
     }
+
+    public function test_user_cannot_reuse_coupon_on_second_checkout(): void
+    {
+        $coupon = Coupon::create([
+            'code'            => 'ONCEONLY',
+            'discount_type'   => 'fixed',
+            'discount_amount' => 10.00,
+            'is_active'       => true,
+        ]);
+
+        $cart = Cart::create(['user_id' => $this->user->id]);
+        $cart->items()->create(['product_id' => $this->product->id, 'quantity' => 1]);
+
+        // First checkout succeeds
+        $res1 = $this->withHeader('Authorization', "Bearer {$this->token}")
+            ->postJson('/api/orders', [
+                'address_id'     => $this->address->id,
+                'payment_method' => 'cod',
+                'coupon_code'    => 'ONCEONLY',
+            ]);
+
+        $res1->assertStatus(201);
+        $this->assertDatabaseCount('coupon_usages', 1);
+
+        // User refills cart
+        $cart->items()->create(['product_id' => $this->product->id, 'quantity' => 1]);
+
+        // Second checkout with same coupon must be rejected
+        $res2 = $this->withHeader('Authorization', "Bearer {$this->token}")
+            ->postJson('/api/orders', [
+                'address_id'     => $this->address->id,
+                'payment_method' => 'cod',
+                'coupon_code'    => 'ONCEONLY',
+            ]);
+
+        $res2->assertStatus(422)
+            ->assertJsonPath('success', false)
+            ->assertJsonPath('message', "You have already redeemed coupon 'ONCEONLY'. Each coupon can only be used once per customer.");
+    }
+
+    public function test_database_enforces_unique_coupon_usage_per_user(): void
+    {
+        $coupon = Coupon::create([
+            'code'            => 'DBUNIQUE',
+            'discount_type'   => 'fixed',
+            'discount_amount' => 5.00,
+            'is_active'       => true,
+        ]);
+
+        $order1 = Order::create(['user_id' => $this->user->id, 'address_id' => $this->address->id, 'status' => 'pending', 'total_amount' => 50]);
+        $order2 = Order::create(['user_id' => $this->user->id, 'address_id' => $this->address->id, 'status' => 'pending', 'total_amount' => 50]);
+
+        CouponUsage::create([
+            'coupon_id' => $coupon->id,
+            'user_id'   => $this->user->id,
+            'order_id'  => $order1->id,
+        ]);
+
+        $this->expectException(\Illuminate\Database\QueryException::class);
+
+        // Attempting to create duplicate CouponUsage for same coupon and user must violate DB unique constraint
+        CouponUsage::create([
+            'coupon_id' => $coupon->id,
+            'user_id'   => $this->user->id,
+            'order_id'  => $order2->id,
+        ]);
+    }
 }

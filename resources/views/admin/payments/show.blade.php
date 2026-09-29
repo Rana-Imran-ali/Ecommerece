@@ -41,7 +41,34 @@
                 <div><span class="text-muted">Last Updated:</span> {{ $payment->updated_at->format('M d, Y H:i:s') }}</div>
             </div>
 
+            @if($payment->payment_method === 'bank_transfer' && !empty($payment->payment_details))
+            <div style="margin-top:16px;padding-top:14px;border-top:2px dashed var(--border)">
+                <div class="card-title" style="font-size:0.85rem;margin-bottom:10px">🏦 Bank Transfer Details (Customer Submission)</div>
+                <div style="display:flex;flex-direction:column;gap:8px;font-size:0.875rem">
+                    <div><span class="text-muted">Sender Bank:</span> <strong>{{ $payment->payment_details['sender_bank'] ?? '—' }}</strong></div>
+                    <div><span class="text-muted">Sender Name:</span> <strong>{{ $payment->payment_details['sender_name'] ?? '—' }}</strong></div>
+                    <div><span class="text-muted">Transaction Ref:</span> <span style="font-family:monospace;font-weight:600">{{ $payment->transaction_reference ?? '—' }}</span></div>
+                    @if(!empty($payment->payment_details['proof_path']))
+                    <div style="margin-top:6px;padding:10px;background:var(--bg-alt,#f9fafb);border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+                        <div>
+                            <div style="font-size:0.8rem;font-weight:600">📎 Payment Receipt Uploaded</div>
+                            <div style="font-size:0.75rem;color:var(--muted)">{{ $payment->payment_details['proof_original_name'] ?? 'receipt' }}</div>
+                        </div>
+                        <a href="{{ asset('storage/' . $payment->payment_details['proof_path']) }}"
+                           target="_blank" rel="noopener"
+                           class="btn btn-primary btn-xs">
+                            View / Download Proof →
+                        </a>
+                    </div>
+                    @else
+                    <div style="font-size:0.8rem;color:#dc2626;font-weight:500">⚠️ No payment proof file was uploaded.</div>
+                    @endif
+                </div>
+            </div>
+            @endif
+
             <!-- Status Update Form -->
+
             <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
                 <form action="{{ route('admin.payments.status', $payment) }}" method="POST" style="display:flex;gap:10px;align-items:flex-end">
                     @csrf

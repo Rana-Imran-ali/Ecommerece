@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\OrderItem;
 use App\Models\Product;
 use App\Models\Review;
 use Illuminate\Http\JsonResponse;
@@ -36,6 +37,7 @@ class ReviewController extends Controller
 
     /**
      * Store or update a customer review for a product.
+     * Only verified purchasers who have an active/completed order for the product can review.
      */
     public function store(Request $request, Product $product): JsonResponse
     {
@@ -46,14 +48,28 @@ class ReviewController extends Controller
 
         $userId = $request->user()->id;
 
+        // Verified Purchaser verification: ensure customer ordered this item
+        $hasPurchased = OrderItem::whereHas('order', function ($query) use ($userId) {
+            $query->where('user_id', $userId)
+                  ->whereIn('status', ['processing', 'shipped', 'delivered', 'completed']);
+        })->where('product_id', $product->id)->exists();
+
+        if (!$hasPurchased) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only verified purchasers can submit a review for this product.',
+            ], Response::HTTP_FORBIDDEN);
+        }
+
         $review = Review::updateOrCreate(
             [
                 'user_id' => $userId,
                 'product_id' => $product->id,
             ],
             [
-                'rating' => $validated['rating'],
+                'rating'  => $validated['rating'],
                 'comment' => $validated['comment'] ?? null,
+                'status'  => 'approved',
             ]
         );
 

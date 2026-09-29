@@ -18,17 +18,20 @@ class WishlistController extends Controller
     {
         $wishlist = Wishlist::firstOrCreate(['user_id' => $request->user()->id]);
 
+        // Filter out wishlist items whose product has been soft-deleted so
+        // the frontend never receives null-product rows.
         $items = WishlistItem::where('wishlist_id', $wishlist->id)
             ->with(['product.primaryImage', 'product.category', 'variant.optionValues.option'])
+            ->whereHas('product') // excludes rows where product is soft-deleted
             ->latest('id')
             ->get();
 
         return response()->json([
             'success' => true,
             'data' => [
-                'wishlist_id' => $wishlist->id,
-                'items' => $items,
-                'total_items' => $items->count(),
+                'wishlist_id'  => $wishlist->id,
+                'items'        => $items,
+                'total_items'  => $items->count(),
             ],
         ], Response::HTTP_OK);
     }
@@ -44,9 +47,34 @@ class WishlistController extends Controller
         ]);
 
         $product = Product::findOrFail($validated['product_id']);
+
+        // Reject soft-deleted products from being wishlisted
+        if ($product->trashed()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This product is no longer available.',
+            ], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
         $wishlist = Wishlist::firstOrCreate(['user_id' => $request->user()->id]);
 
-        $item = WishlistItem::firstOrCreate([
+        // Explicit duplicate check before insert to avoid race-condition duplicates
+        // that `firstOrCreate` can still produce under concurrent requests.
+        $existingItem = WishlistItem::where('wishlist_id', $wishlist->id)
+            ->where('product_id', $product->id)
+            ->where('product_variant_id', $validated['product_variant_id'] ?? null)
+            ->first();
+
+        if ($existingItem) {
+            $existingItem->load(['product.primaryImage']);
+            return response()->json([
+                'success' => true,
+                'message' => 'Product is already in your wishlist.',
+                'data'    => $existingItem,
+            ], Response::HTTP_OK);
+        }
+
+        $item = WishlistItem::create([
             'wishlist_id'        => $wishlist->id,
             'product_id'         => $product->id,
             'product_variant_id' => $validated['product_variant_id'] ?? null,
@@ -57,7 +85,7 @@ class WishlistController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Product added to wishlist.',
-            'data' => $item,
+            'data'    => $item,
         ], Response::HTTP_OK);
     }
 

@@ -704,18 +704,45 @@ class StripeController extends Controller
 
                     if ($cartItem->product_variant_id) {
                         $variant = ProductVariant::where('id', $cartItem->product_variant_id)->lockForUpdate()->first();
-                        if ($variant) {
-                            $itemPrice = $variant->effective_price;
-                            $variantName = $variant->title;
-                            $variantBeforeStock = (int) $variant->stock;
-                            $variantAfterStock  = max(0, $variantBeforeStock - $cartItem->quantity);
-                            $variant->update(['stock' => $variantAfterStock]);
+                        if (!$variant || $variant->stock < $cartItem->quantity) {
+                            $varTitle = $cartItem->variant?->title ?? 'Variant';
+                            throw new \RuntimeException("Insufficient stock for '{$product->name} ({$varTitle})'. Available: " . ($variant->stock ?? 0));
+                        }
+
+                        $itemPrice = $variant->effective_price;
+                        $variantName = $variant->title;
+                        $variantBeforeStock = (int) $variant->stock;
+                        $variantAfterStock  = $variantBeforeStock - $cartItem->quantity;
+
+                        // Atomic conditional decrement: prevents race conditions and overselling
+                        $affected = ProductVariant::where('id', $variant->id)
+                            ->where('stock', '>=', $cartItem->quantity)
+                            ->decrement('stock', $cartItem->quantity);
+
+                        if (!$affected) {
+                            throw new \RuntimeException("Insufficient stock for '{$product->name} ({$variantName})'.");
+                        }
+
+                        // Variant items: deduct only variant stock, never touch parent product stock
+                        $beforeStock = $variantBeforeStock;
+                        $afterStock  = $variantAfterStock;
+                    } else {
+                        if (!$product || $product->stock < $cartItem->quantity) {
+                            throw new \RuntimeException("Insufficient stock for '{$product->name}'. Available: " . ($product->stock ?? 0));
+                        }
+
+                        $beforeStock = (int) $product->stock;
+                        $afterStock  = $beforeStock - $cartItem->quantity;
+
+                        // Atomic conditional decrement: prevents race conditions and overselling
+                        $affected = Product::where('id', $product->id)
+                            ->where('stock', '>=', $cartItem->quantity)
+                            ->decrement('stock', $cartItem->quantity);
+
+                        if (!$affected) {
+                            throw new \RuntimeException("Insufficient stock for '{$product->name}'.");
                         }
                     }
-
-                    $beforeStock = (int) $product->stock;
-                    $afterStock  = max(0, $beforeStock - $cartItem->quantity);
-                    $product->update(['stock' => $afterStock]);
 
                     OrderItem::create([
                         'order_id'           => $order->id,
@@ -741,8 +768,22 @@ class StripeController extends Controller
                 }
 
                 if ($coupon) {
+                    // Concurrency protection: lock coupon row and verify usage limit within transaction
+                    $lockedCoupon = Coupon::where('id', $coupon->id)->lockForUpdate()->first();
+                    if (!$lockedCoupon || ($err = $lockedCoupon->globalValidationError())) {
+                        throw new \RuntimeException($err ?? 'Selected coupon is no longer available.');
+                    }
+
+                    $alreadyUsed = CouponUsage::where('coupon_id', $lockedCoupon->id)
+                        ->where('user_id', $userId)
+                        ->exists();
+
+                    if ($alreadyUsed) {
+                        throw new \RuntimeException("You have already redeemed coupon '{$lockedCoupon->code}'.");
+                    }
+
                     CouponUsage::create([
-                        'coupon_id' => $coupon->id,
+                        'coupon_id' => $lockedCoupon->id,
                         'user_id'   => $userId,
                         'order_id'  => $order->id,
                     ]);
@@ -798,16 +839,38 @@ class StripeController extends Controller
                 // Restore coupon usage if order is cancelled
                 CouponUsage::where('order_id', $order->id)->delete();
 
-                // Restore stock and record inventory logs
+                // Restore stock and record inventory logs with variant integrity
                 foreach ($order->items as $item) {
                     $product = Product::where('id', $item->product_id)->lockForUpdate()->first();
-                    if ($product) {
+                    $variant = null;
+
+                    if ($item->product_variant_id) {
+                        $variant = ProductVariant::where('id', $item->product_variant_id)->lockForUpdate()->first();
+                        if ($variant) {
+                            $variantBefore = (int) $variant->stock;
+                            $variantAfter  = $variantBefore + $item->quantity;
+                            $variant->update(['stock' => $variantAfter]);
+
+                            InventoryLog::create([
+                                'product_id'         => $product?->id ?? $item->product_id,
+                                'product_variant_id' => $variant->id,
+                                'user_id'            => $order->user_id,
+                                'type'               => 'return',
+                                'quantity'           => $item->quantity,
+                                'quantity_before'    => $variantBefore,
+                                'quantity_after'     => $variantAfter,
+                                'reference_id'       => (string) $order->id,
+                                'notes'              => "Stock restored: Stripe payment failed for order #{$order->id} ({$item->variant_name})",
+                            ]);
+                        }
+                    } elseif ($product) {
                         $before = (int) $product->stock;
                         $after  = $before + $item->quantity;
                         $product->update(['stock' => $after]);
 
                         InventoryLog::create([
                             'product_id'      => $product->id,
+                            'product_variant_id' => null,
                             'user_id'         => $order->user_id,
                             'type'            => 'return',
                             'quantity'        => $item->quantity,
@@ -842,16 +905,38 @@ class StripeController extends Controller
                     // Restore coupon usage
                     CouponUsage::where('order_id', $order->id)->delete();
 
-                    // Restore stock and record inventory logs
+                    // Restore stock and record inventory logs with variant integrity
                     foreach ($order->items as $item) {
                         $product = Product::where('id', $item->product_id)->lockForUpdate()->first();
-                        if ($product) {
+                        $variant = null;
+
+                        if ($item->product_variant_id) {
+                            $variant = ProductVariant::where('id', $item->product_variant_id)->lockForUpdate()->first();
+                            if ($variant) {
+                                $variantBefore = (int) $variant->stock;
+                                $variantAfter  = $variantBefore + $item->quantity;
+                                $variant->update(['stock' => $variantAfter]);
+
+                                InventoryLog::create([
+                                    'product_id'         => $product?->id ?? $item->product_id,
+                                    'product_variant_id' => $variant->id,
+                                    'user_id'            => $order->user_id,
+                                    'type'               => 'return',
+                                    'quantity'           => $item->quantity,
+                                    'quantity_before'    => $variantBefore,
+                                    'quantity_after'     => $variantAfter,
+                                    'reference_id'       => (string) $order->id,
+                                    'notes'              => "Stock restored: Stripe charge refunded for order #{$order->id} ({$item->variant_name})",
+                                ]);
+                            }
+                        } elseif ($product) {
                             $before = (int) $product->stock;
                             $after  = $before + $item->quantity;
                             $product->update(['stock' => $after]);
 
                             InventoryLog::create([
                                 'product_id'      => $product->id,
+                                'product_variant_id' => null,
                                 'user_id'         => $order->user_id,
                                 'type'            => 'return',
                                 'quantity'        => $item->quantity,
