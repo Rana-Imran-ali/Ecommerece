@@ -41,6 +41,9 @@ Route::view('/categories', 'categories.index')->name('categories.index');
 
 // About & Contact
 Route::view('/about', 'about')->name('about');
+
+// AI Chat Board
+Route::view('/chat', 'chat.index')->name('chat.index');
 Route::view('/contact', 'contact')->name('contact');
 Route::post('/contact', function (Request $request) {
     $validated = $request->validate([

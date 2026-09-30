@@ -5,7 +5,7 @@
 @section('content')
 <div class="card">
     <form method="GET" class="filter-bar">
-        <input type="text" name="search" class="form-control" placeholder="Customer name or email…" value="{{ request('search') }}">
+        <input type="text" name="search" class="form-control" placeholder="Search Order #, customer, email, or phone…" value="{{ request('search') }}">
         <select name="status" class="form-control">
             <option value="">All Status</option>
             @foreach($statuses as $s)

@@ -52,9 +52,19 @@
                     <tbody>
                         @foreach($order->payments as $payment)
                         <tr>
-                            <td>{{ $payment->method ?? 'N/A' }}</td>
+                            <td><span class="badge badge-gray" style="font-family:monospace">{{ strtoupper($payment->payment_method ?? 'N/A') }}</span></td>
                             <td>${{ number_format($payment->amount, 2) }}</td>
-                            <td><span class="badge {{ $payment->status === 'paid' ? 'badge-green' : 'badge-yellow' }}">{{ ucfirst($payment->status) }}</span></td>
+                            <td>
+                                @php
+                                    $badgeCls = match($payment->status) {
+                                        'completed' => 'badge-green',
+                                        'failed' => 'badge-red',
+                                        'refunded' => 'badge-purple',
+                                        default => 'badge-yellow'
+                                    };
+                                @endphp
+                                <span class="badge {{ $badgeCls }}">{{ ucfirst($payment->status) }}</span>
+                            </td>
                             <td class="text-sm text-muted">{{ $payment->created_at->format('M d, Y H:i') }}</td>
                         </tr>
                         @endforeach

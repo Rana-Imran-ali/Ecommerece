@@ -18,6 +18,7 @@ class NewPagesTest extends TestCase
         $this->get('/search')->assertOk();
         $this->get('/about')->assertOk();
         $this->get('/contact')->assertOk();
+        $this->get('/chat')->assertOk()->assertSee('Chat History');
     }
 
     public function test_contact_form_submission(): void
@@ -59,5 +60,35 @@ class NewPagesTest extends TestCase
         ]);
 
         $this->assertEquals('123 Market St, Suite 400', $address->street);
+    }
+
+    public function test_ai_chat_api_endpoint_returns_json(): void
+    {
+        // Validation failure must return JSON (not HTML redirect)
+        $res = $this->post('/api/ai/chat', []);
+        $res->assertStatus(422)
+            ->assertJsonStructure(['success', 'message', 'errors']);
+
+        // Mock external Google Gemini API call
+        \Illuminate\Support\Facades\Http::fake([
+            'generativelanguage.googleapis.com/*' => \Illuminate\Support\Facades\Http::response([
+                'candidates' => [
+                    [
+                        'content' => [
+                            'parts' => [
+                                ['text' => 'Hello! How can I assist your shopping today?']
+                            ]
+                        ]
+                    ]
+                ]
+            ], 200)
+        ]);
+
+        $resSuccess = $this->post('/api/ai/chat', ['message' => 'Hello AI']);
+        $resSuccess->assertOk()
+            ->assertJson([
+                'success' => true,
+                'message' => 'Hello! How can I assist your shopping today?',
+            ]);
     }
 }

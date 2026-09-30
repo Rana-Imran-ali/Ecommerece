@@ -12,8 +12,8 @@ class ReportController extends Controller
 {
     public function sales(Request $request)
     {
-        $from = $request->date('from', now()->startOfMonth());
-        $to   = $request->date('to',   now()->endOfMonth());
+        $from = $request->filled('from') ? $request->date('from') : now()->startOfMonth();
+        $to   = $request->filled('to')   ? $request->date('to')   : now()->endOfMonth();
 
         $daily = Order::where('status', 'delivered')
             ->whereBetween('created_at', [$from->startOfDay(), $to->endOfDay()])
@@ -30,8 +30,8 @@ class ReportController extends Controller
 
     public function topProducts(Request $request)
     {
-        $from = $request->date('from', now()->startOfMonth());
-        $to   = $request->date('to',   now()->endOfMonth());
+        $from = $request->filled('from') ? $request->date('from') : now()->startOfMonth();
+        $to   = $request->filled('to')   ? $request->date('to')   : now()->endOfMonth();
 
         $products = DB::table('order_items')
             ->join('orders', 'orders.id', '=', 'order_items.order_id')

@@ -13,6 +13,7 @@ use App\Http\Controllers\WhatsAppWebhookController;
 use App\Http\Controllers\WishlistController;
 use App\Http\Middleware\ApiAuthMiddleware;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Api\AiChatController;
 
 /*
 |--------------------------------------------------------------------------
@@ -148,4 +149,7 @@ Route::middleware(ApiAuthMiddleware::class)->group(function () {
         ->name('api.stripe.session'); // Alternative: Hosted Stripe Checkout
         
 });
+
+// gemini route 
+Route::post('/ai/chat', [AiChatController::class, 'chat']);
 

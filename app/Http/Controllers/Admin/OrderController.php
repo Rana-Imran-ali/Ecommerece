@@ -23,8 +23,24 @@ class OrderController extends Controller
             $query->where('status', $request->status);
         }
         if ($request->filled('search')) {
-            $query->whereHas('user', fn($q) => $q->where('name', 'like', '%' . $request->search . '%')
-                ->orWhere('email', 'like', '%' . $request->search . '%'));
+            $search = trim($request->search);
+            $cleanId = ltrim(preg_replace('/[^0-9]/', '', $search), '0');
+
+            $query->where(function ($q) use ($search, $cleanId) {
+                if ($cleanId !== '') {
+                    $q->where('id', (int) $cleanId);
+                }
+                $q->orWhere('customer_email', 'like', "%{$search}%")
+                  ->orWhere('shipping_name', 'like', "%{$search}%")
+                  ->orWhereHas('user', function ($uq) use ($search) {
+                      $uq->where('name', 'like', "%{$search}%")
+                         ->orWhere('email', 'like', "%{$search}%");
+                  })
+                  ->orWhereHas('address', function ($aq) use ($search) {
+                      $aq->where('name', 'like', "%{$search}%")
+                         ->orWhere('phone', 'like', "%{$search}%");
+                  });
+            });
         }
         $orders = $query->paginate(20)->withQueryString();
         $statuses = self::STATUSES;
