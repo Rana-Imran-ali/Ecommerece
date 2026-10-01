@@ -91,8 +91,8 @@ class Order extends Model
         return match ($this->status) {
             'pending'          => 'Pending Confirmation',
             'processing'       => 'Confirmed & Processing',
+            'shipped'          => 'Shipped',
             'out_for_delivery' => 'Out for Delivery',
-            'shipped'          => 'Out for Delivery',
             'delivered'        => 'Delivered',
             'cancelled'        => 'Cancelled',
             default            => ucfirst($this->status),

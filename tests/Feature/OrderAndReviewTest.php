@@ -249,7 +249,7 @@ class OrderAndReviewTest extends TestCase
             ->patchJson("/api/orders/{$order->id}/cancel");
 
         $response->assertOk();
-        $this->assertDatabaseMissing('orders', ['id' => $order->id]);
+        $this->assertDatabaseHas('orders', ['id' => $order->id, 'status' => 'cancelled']);
 
         // Stock restored from 15 to 20
         $this->assertEquals(20, $this->product->fresh()->stock);
@@ -272,7 +272,7 @@ class OrderAndReviewTest extends TestCase
             'price'        => 100.00,
         ]);
 
-        // 1. Post a review
+        // 1. Post a review (defaults to 'pending' for moderation)
         $postRes = $this->withHeader('Authorization', "Bearer {$this->token1}")
             ->postJson("/api/products/{$this->product->id}/reviews", [
                 'rating' => 5,
@@ -280,9 +280,20 @@ class OrderAndReviewTest extends TestCase
             ]);
 
         $postRes->assertCreated()
-            ->assertJsonPath('data.rating', 5);
+            ->assertJsonPath('data.rating', 5)
+            ->assertJsonPath('data.status', 'pending');
 
-        // 2. View product reviews
+        $reviewId = $postRes->json('data.id');
+
+        // Pending review must not be listed publicly yet
+        $pendingListRes = $this->getJson("/api/products/{$this->product->id}/reviews");
+        $pendingListRes->assertOk()
+            ->assertJsonPath('data.total_reviews', 0);
+
+        // Approve review (admin moderation)
+        Review::where('id', $reviewId)->update(['status' => 'approved']);
+
+        // 2. View product reviews after approval
         $listRes = $this->getJson("/api/products/{$this->product->id}/reviews");
         $listRes->assertOk()
             ->assertJsonPath('data.total_reviews', 1)

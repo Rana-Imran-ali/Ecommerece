@@ -50,19 +50,7 @@ class Coupon extends Model
      */
     public function isCurrentlyValid(): bool
     {
-        if (!$this->is_active) {
-            return false;
-        }
-
-        if ($this->expires_at !== null && Carbon::now()->gt($this->expires_at)) {
-            return false;
-        }
-
-        if ($this->max_uses !== null && $this->usages()->count() >= $this->max_uses) {
-            return false;
-        }
-
-        return true;
+        return $this->globalValidationError() === null;
     }
 
     /**

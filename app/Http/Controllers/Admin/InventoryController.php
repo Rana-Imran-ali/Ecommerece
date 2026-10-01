@@ -46,7 +46,13 @@ class InventoryController extends Controller
         $variant = null;
 
         if (!empty($validated['product_variant_id'])) {
-            $variant = ProductVariant::findOrFail($validated['product_variant_id']);
+            $variant = ProductVariant::where('id', $validated['product_variant_id'])
+                ->where('product_id', $product->id)
+                ->first();
+
+            if (!$variant) {
+                return back()->with('error', "Selected variant does not belong to product '{$product->name}'.");
+            }
 
             $increase       = in_array($validated['type'], ['stock_in', 'adjustment_in']);
             $variantBefore  = (int) $variant->stock;

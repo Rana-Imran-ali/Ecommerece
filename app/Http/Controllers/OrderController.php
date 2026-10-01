@@ -557,7 +557,8 @@ class OrderController extends Controller
 }
 
     /**
-     * Cancel a pending order and restore inventory stock.
+     * Cancel a pending or processing order and restore inventory stock.
+     * For card-paid orders in 'processing' status, an automatic Stripe refund is issued.
      */
     public function cancel(Request $request, Order $order): JsonResponse
     {
@@ -569,14 +570,37 @@ class OrderController extends Controller
             ], Response::HTTP_NOT_FOUND);
         }
 
-        if ($order->status !== 'pending') {
+        // Allow cancellation of 'pending' (COD/bank) and 'processing' (card-paid) orders.
+        // Shipped, delivered, and already-cancelled orders cannot be cancelled.
+        $cancellableStatuses = ['pending', 'processing'];
+        if (!in_array($order->status, $cancellableStatuses, true)) {
             return response()->json([
                 'success' => false,
-                'message' => "Order cannot be cancelled because its current status is '{$order->status}'.",
+                'message' => "Order cannot be cancelled because its current status is '{$order->status}'. Only pending or processing orders can be cancelled.",
             ], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
-        DB::transaction(function () use ($order, $request) {
+        // ── Stripe Refund for card-paid orders ─────────────────────────────────
+        // Issue the Stripe refund BEFORE touching the DB so that if the refund fails,
+        // we don't silently cancel the order without returning the customer's money.
+        $cardPayment = $order->payments()->where('payment_method', 'card')->first();
+        if ($cardPayment && $cardPayment->stripe_payment_intent_id) {
+            try {
+                $stripe = new \Stripe\StripeClient(config('services.stripe.secret'));
+                $stripe->refunds->create([
+                    'payment_intent' => $cardPayment->stripe_payment_intent_id,
+                ]);
+                Log::info("Refund issued for order #{$order->id}, PaymentIntent {$cardPayment->stripe_payment_intent_id}");
+            } catch (\Exception $e) {
+                Log::error("Stripe refund failed for order #{$order->id}: " . $e->getMessage());
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unable to process the refund for your card payment. Please contact support.',
+                ], Response::HTTP_UNPROCESSABLE_ENTITY);
+            }
+        }
+
+        DB::transaction(function () use ($order, $request, $cardPayment) {
             // Restore coupon usage if order is cancelled
             CouponUsage::where('order_id', $order->id)->delete();
 
@@ -592,8 +616,6 @@ class OrderController extends Controller
                         $variantAfter  = $variantBefore + $item->quantity;
                         $variant->update(['stock' => $variantAfter]);
 
-                        // Variant-based items: restore variant stock only — do NOT touch parent product stock.
-                        // Mirrors the corrected store() logic.
                         InventoryLog::create([
                             'product_id'         => $product?->id ?? $item->product_id,
                             'product_variant_id' => $variant->id,
@@ -607,7 +629,6 @@ class OrderController extends Controller
                         ]);
                     }
                 } elseif ($product) {
-                    // No variant: restore parent product stock.
                     $before = (int) $product->stock;
                     $after  = $before + $item->quantity;
                     $product->update(['stock' => $after]);
@@ -626,15 +647,28 @@ class OrderController extends Controller
                 }
             }
 
-            // Permanently remove related payments, items, and the order record
-            $order->payments()->delete();
+            // Mark card payment as 'refunded' instead of deleting it.
+            // Preserving the payment row maintains the Stripe PI uniqueness guard
+            // and the full audit trail for accounting/support.
+            if ($cardPayment) {
+                $cardPayment->update(['status' => 'refunded']);
+            }
+
+            // Mark non-card payments (COD/bank) as cancelled too
+            $order->payments()->where('payment_method', '!=', 'card')->update(['status' => 'cancelled']);
+
+            // Delete order items and mark order as cancelled (preserve record for audit trail)
             $order->items()->delete();
-            $order->delete();
+            $order->update(['status' => 'cancelled']);
         });
+
+        $refundMessage = $cardPayment && $cardPayment->stripe_payment_intent_id
+            ? 'Order cancelled and a full refund has been issued to your card (typically 5-10 business days).'
+            : 'Order cancelled successfully.';
 
         return response()->json([
             'success' => true,
-            'message' => 'Order cancelled and permanently deleted from the database.',
+            'message' => $refundMessage,
             'data'    => null,
         ], Response::HTTP_OK);
     }

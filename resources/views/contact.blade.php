@@ -39,8 +39,8 @@
                 <div>
                     <h3 class="text-base font-bold text-gray-900">Email Support</h3>
                     <p class="text-xs text-gray-500 mt-1">Our support inbox is monitored 24/7.</p>
-                    <a href="mailto:support@estore.com" class="text-sm font-semibold text-indigo-600 hover:underline mt-2 inline-block">
-                        support@estore.com
+                    <a href="ranaimranali3310@gmail.com" class="text-sm font-semibold text-indigo-600 hover:underline mt-2 inline-block">
+                        ranaimranali3310@gmil.com
                     </a>
                 </div>
             </div>
@@ -54,10 +54,10 @@
                 </div>
                 <div>
                     <h3 class="text-base font-bold text-gray-900">Phone & WhatsApp</h3>
-                    <p class="text-xs text-gray-500 mt-1">Mon – Fri from 9am to 6pm EST.</p>
+                    <p class="text-xs text-gray-500 mt-1">Mon – Fri from 9am to 6pm.</p>
                     <div class="flex items-center space-x-3 mt-2">
-                        <a href="tel:+18005550199" class="text-sm font-semibold text-emerald-600 hover:underline">
-                            +1 (800) 555-0199
+                        <a href="tel:+92-3411426679" class="text-sm font-semibold text-emerald-600 hover:underline">
+                            +92-3411426676
                         </a>
                         <span class="text-gray-300">|</span>
                         <a href="https://wa.me/{{ preg_replace('/[^0-9]/', '', config('whatsapp.support_phone', '18005550199')) }}?text={{ rawurlencode('Hello! I have a question regarding your store.') }}"
@@ -83,7 +83,7 @@
                 </div>
                 <div>
                     <h3 class="text-base font-bold text-gray-900">Headquarters</h3>
-                    <p class="text-xs text-gray-500 mt-1">100 Commerce Boulevard, Suite 400<br>San Francisco, CA 94105, USA</p>
+                    <p class="text-xs text-gray-500 mt-1">Lahore Sadique Center<br>Offic no 612: pakistan</p>
                 </div>
             </div>
         </div>

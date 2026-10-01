@@ -3,13 +3,11 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Category;
 use App\Models\Product;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Validator;
 
 class AiChatController extends Controller
 {
@@ -109,47 +107,38 @@ class AiChatController extends Controller
         }
 
         // ---------------------------------------------------------------
-        // REAL STORE CATALOG CONTEXT
-        // Fetch live categories + product samples from the database.
-        // Cached for 10 minutes so every request is fast.
+        // SECURE LARAVEL DATABASE FILTERING (NO RAG, NO DIRECT DB ACCESS FOR GEMINI)
+        // Laravel analyzes query intent, queries MySQL via Eloquent, and filters exact data.
+        // The resulting filtered data is converted to JSON and sent to Gemini.
         // ---------------------------------------------------------------
-        $storeContext = $this->buildStoreContext();
+        $aiContextService = new \App\Services\ProductAiContextService();
+        $dbFilteredContext = $aiContextService->resolveContext($userMessage);
+        $dbJsonString = json_encode($dbFilteredContext, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
 
-        // Fast Product-Catalog Interceptor:
-        // If the user is asking broadly about available products/categories,
-        // reply instantly using the real DB data — no Gemini call needed.
-        $isCatalogQuery = preg_match(
-            '/\b(what|which|list|show|tell me about|do you (have|sell|carry)|types? of|kind of|products?|categories?|catalog|catalogue|collection|available|range|items?)\b/i',
-            $cleanMsg
-        );
-        $isAskingAboutProducts = preg_match(
-            '/\b(products?|items?|categories?|catalog|catalogue|collection|available|sell|have|offer|what do you)\b/i',
-            $cleanMsg
-        );
-
-        if ($isCatalogQuery && $isAskingAboutProducts && strlen($cleanMsg) < 120) {
-            return response()->json([
-                'success' => true,
-                'model'   => 'quick-catalog',
-                'message' => $storeContext['summary'],
-            ]);
-        }
-
-        // Build the Gemini system prompt enriched with REAL store data
-        $systemPrompt = "You are the friendly, knowledgeable AI shopping concierge for this store. "
-            . "Answer questions based ONLY on the actual store data below — never make up products or prices.\n\n"
-            . "=== LIVE STORE CATALOG ===\n"
-            . $storeContext['full']
-            . "\n=== STORE POLICIES ===\n"
+        // Build Gemini system prompt with the filtered JSON
+        $systemPrompt = "You are the intelligent, polite AI shopping concierge for this online store.\n\n"
+            . "CRITICAL INSTRUCTIONS & STRICT TRUTHFULNESS RULES:\n"
+            . "1. You do NOT have direct database access. The backend Laravel application has queried the database and provided the filtered records in the JSON below.\n"
+            . "2. Answer questions based ONLY on the verified database JSON provided below. Never invent, hallucinate, or assume any product, price, discount, or stock quantity.\n"
+            . "3. If the user asks how many products we have or asks for a list/menu, use 'total_active_products', 'categories_summary', and 'store_menu' from the JSON.\n"
+            . "4. If the customer asks for the price, availability, or details of a specific item, report the exact price and stock status from 'matched_products'.\n"
+            . "5. If 'items_found_count' is 0 or no matching item is found in the JSON, politely explain that the item is currently not in our catalog and offer help with our available categories.\n"
+            . "6. Keep answers concise, helpful, friendly, and format key prices and details in markdown bold (e.g. **\$49.99**).\n\n"
+            . "=== FILTERED DATABASE JSON (FROM LARAVEL) ===\n"
+            . $dbJsonString . "\n\n"
+            . "=== STORE POLICIES ===\n"
             . "• Shipping: 2-4 business days. Free on orders over \$50.\n"
             . "• Returns: 30-day money-back guarantee.\n"
-            . "• Discount code: WELCOME10 for 10% off.\n\n"
-            . "Keep answers concise and helpful. Use markdown bullet points. Do not invent any product that is not listed above.";
+            . "• Discount code: WELCOME10 for 10% off.\n";
 
         // --- RESPONSE CACHE ---
-        // Cache AI replies for 30 minutes keyed by normalised message fingerprint.
-        // Repeated or near-identical questions are served in < 1ms (no network call).
-        $cacheKey = 'ai_reply_' . md5(strtolower(trim($userMessage)));
+        // Cache AI replies keyed by normalised message AND a catalog version hash.
+        // The catalog version hash changes when any product is updated/created,
+        // preventing stale AI answers about prices or stock from being served.
+        $catalogVersion = Cache::remember('catalog_version_hash', now()->addMinutes(5), function () {
+            return md5(Product::where('status', 'active')->max('updated_at') . Product::where('status', 'active')->count());
+        });
+        $cacheKey = 'ai_reply_' . md5(strtolower(trim($userMessage)) . $catalogVersion);
         if (Cache::has($cacheKey)) {
             return response()->json([
                 'success' => true,
@@ -158,10 +147,11 @@ class AiChatController extends Controller
             ]);
         }
 
-        // Priority models ordered by speed & availability
-        // gemini-3.5-flash-lite  → fastest, cheapest, great for short chat
-        // gemini-3.8-flash       → current GA workhorse, reliable
+        // Priority models ordered by reliability and speed
         $models = [
+            'gemini-1.5-flash',
+            'gemini-2.0-flash',
+            'gemini-2.5-flash',
             'gemini-3.5-flash-lite',
             'gemini-3.8-flash',
         ];
@@ -194,8 +184,8 @@ class AiChatController extends Controller
                             ],
                         ],
                         'generationConfig' => [
-                            'temperature'     => 0.3,   // lower = faster, more deterministic
-                            'maxOutputTokens' => 250,   // shorter answers = faster tokens
+                            'temperature'     => 0.2,   // lower = factual, precise
+                            'maxOutputTokens' => 350,
                         ],
                     ]);
 
@@ -204,8 +194,8 @@ class AiChatController extends Controller
                     $aiMessage = $data['candidates'][0]['content']['parts'][0]['text'] ?? null;
 
                     if ($aiMessage) {
-                        // Store in cache for 30 minutes so identical questions are instant
-                        Cache::put($cacheKey, $aiMessage, now()->addMinutes(30));
+                        // Store in cache for 15 minutes
+                        Cache::put($cacheKey, $aiMessage, now()->addMinutes(15));
 
                         return response()->json([
                             'success' => true,
@@ -234,75 +224,6 @@ class AiChatController extends Controller
         ], $lastStatus);
     }
 
-    /**
-     * Build a real-data store context string from the live database.
-     * Returns two formats:
-     *  - 'summary'  : short human-readable catalog overview (for fast interceptor)
-     *  - 'full'     : detailed context injected into the Gemini system prompt
-     *
-     * Results are cached for 10 minutes to keep every request fast.
-     */
-    protected function buildStoreContext(): array
-    {
-        return Cache::remember('ai_store_context', now()->addMinutes(10), function () {
-            // Load categories with their active, in-stock products
-            $categories = Category::with([
-                'products' => function ($q) {
-                    $q->where('status', 'active')
-                      ->where('stock', '>', 0)
-                      ->orderBy('price')
-                      ->limit(10); // up to 10 products per category in context
-                },
-            ])->get();
-
-            $summaryLines = [];
-            $fullLines    = [];
-            $totalProducts = 0;
-
-            foreach ($categories as $category) {
-                $products = $category->products;
-                if ($products->isEmpty()) {
-                    continue;
-                }
-
-                $totalProducts += $products->count();
-                $priceMin = $products->min('price');
-                $priceMax = $products->max('price');
-
-                // Summary line (used by fast interceptor)
-                $summaryLines[] = "• **{$category->name}** ({$products->count()} items, \${$priceMin}–\${$priceMax})";
-
-                // Detailed lines for Gemini system prompt
-                $fullLines[] = "Category: {$category->name}";
-                foreach ($products as $p) {
-                    $stockNote = $p->stock <= 5 ? ' [Low Stock]' : '';
-                    $fullLines[] = "  - {$p->name} | Price: \${$p->price}{$stockNote}";
-                    if ($p->description) {
-                        // Include first 100 chars of description for context
-                        $desc = mb_substr(strip_tags($p->description), 0, 100);
-                        $fullLines[] = "    Description: {$desc}";
-                    }
-                }
-                $fullLines[] = ''; // blank separator between categories
-            }
-
-            if (empty($summaryLines)) {
-                return [
-                    'summary' => "We're currently adding products to our store. Please check back soon or visit our [Shop Page](/shop)!",
-                    'full'    => "No active products are currently listed in the store.",
-                ];
-            }
-
-            $categoryCount = count($summaryLines);
-            $summary = "🛍️ **Here's what we currently have in our store** ({$totalProducts} products across {$categoryCount} categories):\n\n"
-                . implode("\n", $summaryLines)
-                . "\n\nBrowse everything on our [Shop Page](/shop), or ask me about a specific category and I'll share more details!";
-
-            $full = implode("\n", $fullLines);
-
-            return compact('summary', 'full');
-        });
-    }
 
     /**
      * Resilient message extraction supporting JSON, query params, form-data, and raw text.

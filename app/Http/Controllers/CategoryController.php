@@ -33,7 +33,8 @@ class CategoryController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255', 'unique:categories,name'],
+            'name'        => ['required', 'string', 'max:255', 'unique:categories,name'],
+            'description' => ['nullable', 'string', 'max:1000'],
         ]);
 
         $category = Category::create($validated);
@@ -68,7 +69,8 @@ class CategoryController extends Controller
     public function update(Request $request, Category $category): JsonResponse
     {
         $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255', 'unique:categories,name,' . $category->id],
+            'name'        => ['required', 'string', 'max:255', 'unique:categories,name,' . $category->id],
+            'description' => ['nullable', 'string', 'max:1000'],
         ]);
 
         $category->update($validated);
@@ -87,7 +89,7 @@ class CategoryController extends Controller
      */
     public function destroy(Category $category): JsonResponse
     {
-        if ($category->products()->exists()) {
+        if ($category->products()->withTrashed()->exists()) {
             return response()->json([
                 'success' => false,
                 'message' => 'Cannot delete a category that has products.',
