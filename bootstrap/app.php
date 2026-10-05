@@ -15,7 +15,8 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->statefulApi();
 
         $middleware->alias([
-            'admin' => \App\Http\Middleware\AdminMiddleware::class,
+            'admin'                => \App\Http\Middleware\AdminMiddleware::class,
+            'whatsapp.signature'   => \App\Http\Middleware\VerifyWhatsAppSignature::class,
         ]);
 
         // Stripe sends raw POST requests without a CSRF token — exclude webhook endpoint

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" class="scroll-smooth">
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -7,41 +7,30 @@
 
         <title>@yield('title', config('app.name', 'Laravel'))</title>
 
-        <!-- Fonts -->
-        <link rel="preconnect" href="https://fonts.bunny.net">
-        <link href="https://fonts.bunny.net/css?family=figtree:400,500,600&display=swap" rel="stylesheet" />
+        <!-- Fonts: Plus Jakarta Sans & Inter -->
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
         <!-- Scripts & Styles -->
         @vite(['resources/css/app.css', 'resources/js/app.js'])
         @stack('styles')
     </head>
-    <body class="font-sans antialiased">
-        <!-- Authentication Session Bridge: Run before navbar so auth state is immediately synchronized -->
+    <body class="font-sans antialiased bg-slate-50 text-slate-900 selection:bg-blue-600 selection:text-white min-h-screen flex flex-col">
+        <!-- Authentication State Hydration: Safe session-backed state for instant client-side navbar rendering -->
         @auth
-            @php
-                $currentUser = auth()->user();
-                $sessionUser = [
-                    'id'         => $currentUser->id,
-                    'name'       => $currentUser->name,
-                    'email'      => $currentUser->email,
-                    'role'       => $currentUser->role ?? 'customer',
-                    'avatar_url' => $currentUser->avatar_url,
-                ];
-                // Reuse existing session token or create a dedicated web-session token
-                $sessionToken = session('api_token');
-                if (!$sessionToken) {
-                    $currentUser->tokens()->where('name', 'web-session')->delete();
-                    $sessionToken = $currentUser->createToken('web-session')->plainTextToken;
-                    session(['api_token' => $sessionToken]);
-                }
-            @endphp
             <script>
                 window.IS_AUTHENTICATED = true;
-                window.AUTH_USER = @json($sessionUser);
-                window.SESSION_TOKEN = @json($sessionToken);
+                window.AUTH_USER = {!! json_encode([
+                    'id'         => auth()->user()->id,
+                    'name'       => auth()->user()->name,
+                    'email'      => auth()->user()->email,
+                    'role'       => auth()->user()->role ?? 'customer',
+                    'avatar_url' => auth()->user()->avatar_url,
+                ]) !!};
                 try {
-                    localStorage.setItem('ecommerce_auth_token', window.SESSION_TOKEN);
-                    localStorage.setItem('ecommerce_auth_user', JSON.stringify(window.AUTH_USER));
+                    // Security fix: never store auth tokens in localStorage for web session users
+                    localStorage.removeItem('ecommerce_auth_token');
                     sessionStorage.removeItem('logged_out');
                 } catch(e) {}
             </script>
@@ -49,34 +38,33 @@
             <script>
                 window.IS_AUTHENTICATED = false;
                 window.AUTH_USER = null;
-                window.SESSION_TOKEN = null;
                 try {
-                    if (sessionStorage.getItem('logged_out')) {
-                        localStorage.removeItem('ecommerce_auth_token');
-                        localStorage.removeItem('ecommerce_auth_user');
-                        sessionStorage.removeItem('logged_out');
-                    }
+                    localStorage.removeItem('ecommerce_auth_token');
+                    localStorage.removeItem('ecommerce_auth_user');
                 } catch(e) {}
             </script>
         @endauth
 
-        <div class="min-h-screen bg-gray-100 flex flex-col">
-            @include('layouts.navbar')
+        <div class="min-h-screen flex flex-col justify-between">
+            <div>
+                <!-- Storefront Header / Navbar -->
+                @include('layouts.navbar')
 
-            <!-- Page Heading -->
-            @isset($header)
-                <header class="bg-white shadow">
-                    <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-                        {{ $header }}
-                    </div>
-                </header>
-            @endisset
+                <!-- Page Heading (optional) -->
+                @isset($header)
+                    <header class="bg-white border-b border-slate-200/80 shadow-xs">
+                        <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+                            {{ $header }}
+                        </div>
+                    </header>
+                @endisset
 
-            <!-- Page Content -->
-            <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full">
-                {{ $slot ?? '' }}
-                @yield('content')
-            </main>
+                <!-- Page Content -->
+                <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
+                    {{ $slot ?? '' }}
+                    @yield('content')
+                </main>
+            </div>
 
             <!-- Storefront Footer -->
             @include('layouts.footer')

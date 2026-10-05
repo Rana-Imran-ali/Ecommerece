@@ -24,20 +24,28 @@ const CACHE_TTL = {
     default: 15000               // 15 seconds
 };
 
-// Get stored token
+// Check if user is authenticated (either via web session or external API token)
+function isUserAuthenticated() {
+    return (typeof window !== 'undefined' && window.IS_AUTHENTICATED === true) || !!getAuthToken();
+}
+
+// Get stored token (for external/mobile API clients only)
 function getAuthToken() {
-    const token = localStorage.getItem(API_TOKEN_KEY) || (typeof window !== 'undefined' ? window.SESSION_TOKEN : null);
+    const token = localStorage.getItem(API_TOKEN_KEY);
     if (!token || token === 'null' || token === 'undefined') return null;
     return token;
 }
 
-// Get stored user info
+// Get authenticated user info (prefers server session state over localStorage)
 function getAuthUser() {
+    if (typeof window !== 'undefined' && window.AUTH_USER) {
+        return window.AUTH_USER;
+    }
     try {
         const user = localStorage.getItem(API_USER_KEY);
         if (user) return JSON.parse(user);
     } catch (e) {}
-    return (typeof window !== 'undefined' && window.AUTH_USER) ? window.AUTH_USER : null;
+    return null;
 }
 
 // Store auth token & user data
@@ -126,7 +134,7 @@ async function apiFetch(endpoint, options = {}) {
         }
     }
 
-    const cacheKey = `${method}:${url}:${token || 'guest'}`;
+    const cacheKey = `${method}:${url}:${token || (isUserAuthenticated() ? 'auth' : 'guest')}`;
 
     // Check client cache for GET requests
     if (isGet && !bypassCache) {
@@ -235,7 +243,7 @@ function showAlert(containerId, message, type = 'danger') {
  * Fetch and update live counts for cart and wishlist in parallel, with sessionStorage caching
  */
 async function fetchNavbarCounts(force = false) {
-    if (!getAuthToken()) {
+    if (!isUserAuthenticated()) {
         updateBadge('nav-cart-badge', 0);
         updateBadge('nav-wishlist-badge', 0);
         sessionStorage.removeItem(NAV_COUNTS_KEY);
@@ -303,11 +311,8 @@ function updateBadge(id, count) {
  * Update UI for authenticated vs guest user in the Navbar
  */
 function updateNavAuthUI() {
-    const isServerAuth = typeof window !== 'undefined' && window.IS_AUTHENTICATED === true;
-    const token = getAuthToken();
+    const isAuth = isUserAuthenticated();
     const user = getAuthUser();
-
-    const isAuth = isServerAuth || !!(token && user);
 
     const guestElements = document.querySelectorAll('.nav-guest-only');
     const authElements = document.querySelectorAll('.nav-auth-only');

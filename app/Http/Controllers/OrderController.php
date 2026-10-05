@@ -12,6 +12,8 @@ use App\Models\OrderItem;
 use App\Models\Payment;
 use App\Models\Product;
 use App\Models\ProductVariant;
+use App\Services\OrderCancellationService;
+use App\Services\PaymentFulfillmentService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -22,6 +24,11 @@ use Symfony\Component\HttpFoundation\Response;
 
 class OrderController extends Controller
 {
+    public function __construct(
+        protected PaymentFulfillmentService   $paymentFulfillmentService,
+        protected OrderCancellationService    $cancellationService
+    ) {
+    }
     /**
      * Display a paginated listing of the authenticated user's orders.
      */
@@ -98,10 +105,10 @@ class OrderController extends Controller
             } catch (\Throwable $e) {}
         }
 
-        try {
-            // ── Webhook Race Condition Resolution ─────────────────────────────
-            // If the Stripe webhook arrived first and already fulfilled this order,
-            // return the created order gracefully instead of throwing 422.
+
+        // ── Webhook Race Condition Resolution ─────────────────────────────
+        // If the Stripe webhook arrived first and already fulfilled this order,
+        // return the created order gracefully instead of throwing 422.
             if ($paymentMethod === 'card' && !empty($stripePaymentIntentId)) {
                 $existingPayment = Payment::where('stripe_payment_intent_id', $stripePaymentIntentId)->first();
                 if ($existingPayment) {
@@ -366,12 +373,72 @@ class OrderController extends Controller
             }
         }
 
-        // ── 9. Execute Order Placement in Database Transaction ────────────────
+        // ── 9. Execute Order Placement ────────────────────────────────────────
+        //
+        // CARD PAYMENTS → Delegated entirely to PaymentFulfillmentService.
+        //   The service holds the distributed lock (stripe_pi_*), performs an inner
+        //   idempotency check via lockForUpdate(), deducts stock atomically, and
+        //   writes Order + OrderItems + Payment + InventoryLog in a single DB transaction.
+        //   We NEVER auto-refund on DB exceptions — if the transaction fails the
+        //   payment record was never written, so the webhook will re-attempt fulfillment.
+        //
+        // COD / BANK TRANSFER → Handled inline below (no Stripe involved).
+
+        if ($paymentMethod === 'card') {
+            try {
+                $customerEmail = !empty($validated['customer_email']) ? trim($validated['customer_email']) : $user->email;
+
+                $order = $this->paymentFulfillmentService->fulfill(
+                    paymentIntentId: $stripePaymentIntentId,
+                    sessionId:       null,
+                    userId:          $user->id,
+                    addressId:       $validated['address_id'],
+                    customerEmail:   $customerEmail,
+                    couponCode:      $validated['coupon_code'] ?? null,
+                    chargedCents:    isset($intent) ? (int) $intent->amount : 0,
+                    paymentDetails:  $paymentDetails
+                );
+            } catch (\Throwable $e) {
+                // DB transaction rolled back — no payment row written.
+                // Do NOT auto-refund: the Stripe webhook will retry and fulfillment
+                // will succeed once the transient error is resolved.
+                Log::error('Card order fulfillment failed (no auto-refund)', [
+                    'intent_id' => $stripePaymentIntentId,
+                    'error'     => $e->getMessage(),
+                ]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Order placement failed due to a server error. Your payment was captured; our team will contact you shortly.',
+                ], Response::HTTP_INTERNAL_SERVER_ERROR);
+            } finally {
+                $lock->release();
+                if (isset($piLock) && $piLock) {
+                    try { $piLock->release(); } catch (\Throwable $e) {}
+                }
+            }
+
+            if (!$order) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Order could not be placed (cart empty, address invalid, or stock unavailable). Please contact support if your card was charged.',
+                ], Response::HTTP_UNPROCESSABLE_ENTITY);
+            }
+
+            $order->load(['items.product.primaryImage', 'address', 'payments', 'couponUsages.coupon']);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Order placed successfully.',
+                'data'    => $order,
+            ], Response::HTTP_CREATED);
+        }
+
+        // ── COD / Bank Transfer: inline transaction ───────────────────────────
         try {
             $order = DB::transaction(
                 function () use (
                     $user, $address, $cart, $totalAmount, $validated, $coupon,
-                    $paymentMethod, $stripePaymentIntentId, $transactionReference, $paymentDetails
+                    $paymentMethod, $transactionReference, $paymentDetails
                 ) {
                     $customerEmail = !empty($validated['customer_email']) ? trim($validated['customer_email']) : $user->email;
                     $expectedDeliveryDate = now()->addDays(4)->toDateString();
@@ -414,7 +481,6 @@ class OrderController extends Controller
                             $variantBeforeStock = (int) $variant->stock;
                             $variantAfterStock  = $variantBeforeStock - $cartItem->quantity;
 
-                            // Atomic conditional decrement: guarantees stock >= quantity at the database engine level
                             $affected = ProductVariant::where('id', $variant->id)
                                 ->where('stock', '>=', $cartItem->quantity)
                                 ->decrement('stock', $cartItem->quantity);
@@ -423,8 +489,6 @@ class OrderController extends Controller
                                 throw new \RuntimeException("Insufficient stock for '{$cartItem->product->name} ({$variantName})'.");
                             }
 
-                            // Variant-based items: only deduct variant stock — do NOT touch parent product stock.
-                            // Parent product.stock is a display-level aggregate; variant stock is the true inventory.
                             $beforeStock = $variantBeforeStock;
                             $afterStock  = $variantAfterStock;
                         } else {
@@ -432,7 +496,6 @@ class OrderController extends Controller
                                 throw new \RuntimeException("Insufficient stock for '{$cartItem->product->name}'. Available: " . ($product->stock ?? 0));
                             }
 
-                            // No variant: deduct directly from parent product stock with atomic conditional decrement
                             $beforeStock = (int) $product->stock;
                             $afterStock  = $beforeStock - $cartItem->quantity;
 
@@ -469,7 +532,6 @@ class OrderController extends Controller
                     }
 
                     if ($coupon) {
-                        // Concurrency protection: lock coupon row and verify usage limit within transaction
                         $lockedCoupon = Coupon::where('id', $coupon->id)->lockForUpdate()->first();
                         if (!$lockedCoupon || ($err = $lockedCoupon->globalValidationError())) {
                             throw new \RuntimeException($err ?? 'Selected coupon is no longer available.');
@@ -490,23 +552,14 @@ class OrderController extends Controller
                         ]);
                     }
 
-                    // Determine payment status based on method
-                    $paymentStatus = $paymentMethod === 'card' ? 'completed' : 'pending';
-
                     Payment::create([
-                        'order_id'                => $order->id,
-                        'payment_method'          => $paymentMethod,
-                        'amount'                  => $totalAmount,
-                        'status'                  => $paymentStatus,
-                        'stripe_payment_intent_id'=> $stripePaymentIntentId,
-                        'transaction_reference'   => $transactionReference,
-                        'payment_details'         => $paymentDetails,
+                        'order_id'              => $order->id,
+                        'payment_method'        => $paymentMethod,
+                        'amount'                => $totalAmount,
+                        'status'                => 'pending',
+                        'transaction_reference' => $transactionReference,
+                        'payment_details'       => $paymentDetails,
                     ]);
-
-                    // Card orders: mark order as processing immediately
-                    if ($paymentMethod === 'card') {
-                        $order->update(['status' => 'processing']);
-                    }
 
                     $cart->items()->delete();
 
@@ -514,29 +567,12 @@ class OrderController extends Controller
                 }
             );
         } catch (\RuntimeException $e) {
-            // If card payment already succeeded but order placement failed (e.g. out of stock),
-            // trigger an automatic refund immediately to prevent customer fund loss!
-            if ($paymentMethod === 'card' && !empty($stripePaymentIntentId)) {
-                try {
-                    $stripe = new \Stripe\StripeClient(config('services.stripe.secret'));
-                    $stripe->refunds->create([
-                        'payment_intent' => $stripePaymentIntentId,
-                    ]);
-                    Log::info("Automatic refund issued for PaymentIntent {$stripePaymentIntentId} due to order placement failure: " . $e->getMessage());
-                } catch (\Exception $refEx) {
-                    Log::error("Failed to auto-refund PaymentIntent {$stripePaymentIntentId}", ['error' => $refEx->getMessage()]);
-                }
-
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Your order could not be completed because an item became unavailable. Your card payment was automatically refunded.',
-                ], Response::HTTP_UNPROCESSABLE_ENTITY);
-            }
-
             return response()->json([
                 'success' => false,
                 'message' => $e->getMessage(),
             ], Response::HTTP_UNPROCESSABLE_ENTITY);
+        } finally {
+            $lock->release();
         }
 
         $order->load(['items.product.primaryImage', 'address', 'payments', 'couponUsages.coupon']);
@@ -546,19 +582,11 @@ class OrderController extends Controller
             'message' => 'Order placed successfully.',
             'data'    => $order,
         ], Response::HTTP_CREATED);
-    } finally {
-        $lock->release();
-        if (isset($piLock) && $piLock) {
-            try {
-                $piLock->release();
-            } catch (\Throwable $e) {}
-        }
     }
-}
 
     /**
-     * Cancel a pending or processing order and restore inventory stock.
-     * For card-paid orders in 'processing' status, an automatic Stripe refund is issued.
+     * Cancel a pending or processing order.
+     * Delegates all business logic (refund, stock restore, idempotency) to OrderCancellationService.
      */
     public function cancel(Request $request, Order $order): JsonResponse
     {
@@ -570,8 +598,8 @@ class OrderController extends Controller
             ], Response::HTTP_NOT_FOUND);
         }
 
-        // Allow cancellation of 'pending' (COD/bank) and 'processing' (card-paid) orders.
-        // Shipped, delivered, and already-cancelled orders cannot be cancelled.
+        // Customers may only cancel pending (COD/bank) or processing (card) orders.
+        // Shipped, delivered, and already-cancelled orders are non-cancellable.
         $cancellableStatuses = ['pending', 'processing'];
         if (!in_array($order->status, $cancellableStatuses, true)) {
             return response()->json([
@@ -580,95 +608,23 @@ class OrderController extends Controller
             ], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
-        // ── Stripe Refund for card-paid orders ─────────────────────────────────
-        // Issue the Stripe refund BEFORE touching the DB so that if the refund fails,
-        // we don't silently cancel the order without returning the customer's money.
-        $cardPayment = $order->payments()->where('payment_method', 'card')->first();
-        if ($cardPayment && $cardPayment->stripe_payment_intent_id) {
-            try {
-                $stripe = new \Stripe\StripeClient(config('services.stripe.secret'));
-                $stripe->refunds->create([
-                    'payment_intent' => $cardPayment->stripe_payment_intent_id,
-                ]);
-                Log::info("Refund issued for order #{$order->id}, PaymentIntent {$cardPayment->stripe_payment_intent_id}");
-            } catch (\Exception $e) {
-                Log::error("Stripe refund failed for order #{$order->id}: " . $e->getMessage());
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Unable to process the refund for your card payment. Please contact support.',
-                ], Response::HTTP_UNPROCESSABLE_ENTITY);
-            }
+        $result = $this->cancellationService->cancel(
+            order:        $order,
+            actorUserId:  $request->user()->id,
+            actor:        'customer',
+            issueRefund:  true
+        );
+
+        if ($result->failed()) {
+            return response()->json([
+                'success' => false,
+                'message' => $result->errorMessage,
+            ], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
-
-        DB::transaction(function () use ($order, $request, $cardPayment) {
-            // Restore coupon usage if order is cancelled
-            CouponUsage::where('order_id', $order->id)->delete();
-
-            // Restore inventory stock for each item with pessimistic lock
-            foreach ($order->items as $item) {
-                $product = Product::where('id', $item->product_id)->lockForUpdate()->first();
-                $variant = null;
-
-                if ($item->product_variant_id) {
-                    $variant = ProductVariant::where('id', $item->product_variant_id)->lockForUpdate()->first();
-                    if ($variant) {
-                        $variantBefore = (int) $variant->stock;
-                        $variantAfter  = $variantBefore + $item->quantity;
-                        $variant->update(['stock' => $variantAfter]);
-
-                        InventoryLog::create([
-                            'product_id'         => $product?->id ?? $item->product_id,
-                            'product_variant_id' => $variant->id,
-                            'user_id'            => $request->user()->id,
-                            'type'               => 'return',
-                            'quantity'           => $item->quantity,
-                            'quantity_before'    => $variantBefore,
-                            'quantity_after'     => $variantAfter,
-                            'reference_id'       => (string) $order->id,
-                            'notes'              => "Stock restored due to customer order #{$order->id} cancellation ({$item->variant_name})",
-                        ]);
-                    }
-                } elseif ($product) {
-                    $before = (int) $product->stock;
-                    $after  = $before + $item->quantity;
-                    $product->update(['stock' => $after]);
-
-                    InventoryLog::create([
-                        'product_id'         => $product->id,
-                        'product_variant_id' => null,
-                        'user_id'            => $request->user()->id,
-                        'type'               => 'return',
-                        'quantity'           => $item->quantity,
-                        'quantity_before'    => $before,
-                        'quantity_after'     => $after,
-                        'reference_id'       => (string) $order->id,
-                        'notes'              => "Stock restored due to customer order #{$order->id} cancellation" . ($item->variant_name ? " ({$item->variant_name})" : ''),
-                    ]);
-                }
-            }
-
-            // Mark card payment as 'refunded' instead of deleting it.
-            // Preserving the payment row maintains the Stripe PI uniqueness guard
-            // and the full audit trail for accounting/support.
-            if ($cardPayment) {
-                $cardPayment->update(['status' => 'refunded']);
-            }
-
-            // Mark non-card payments (COD/bank) as cancelled too
-            $order->payments()->where('payment_method', '!=', 'card')->update(['status' => 'cancelled']);
-
-            // Delete order items and mark order as cancelled (preserve record for audit trail)
-            $order->items()->delete();
-            $order->update(['status' => 'cancelled']);
-        });
-
-        $refundMessage = $cardPayment && $cardPayment->stripe_payment_intent_id
-            ? 'Order cancelled and a full refund has been issued to your card (typically 5-10 business days).'
-            : 'Order cancelled successfully.';
 
         return response()->json([
             'success' => true,
-            'message' => $refundMessage,
+            'message' => $result->message(),
             'data'    => null,
         ], Response::HTTP_OK);
     }

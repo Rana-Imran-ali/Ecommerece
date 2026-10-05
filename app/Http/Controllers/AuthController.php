@@ -95,14 +95,23 @@ class AuthController extends Controller
     }
 
     /**
-     * Log out the current user by revoking only this device's token from the database.
+     * Log out the current user.
+     * Revokes the device's PersonalAccessToken if authenticated via Bearer token.
+     * If authenticated via web session (TransientToken or session cookie), safely terminates session without error.
      */
     public function logout(Request $request): JsonResponse
     {
-        // Delete only the current device's token from personal_access_tokens table.
-        // Unlike cache blacklisting, this persists even if cache is flushed.
-        if ($request->user()) {
-            $request->user()->currentAccessToken()->delete();
+        if ($user = $request->user()) {
+            $token = $user->currentAccessToken();
+
+            // Only delete if it is an actual database PersonalAccessToken (not TransientToken, not null)
+            if ($token instanceof \Laravel\Sanctum\PersonalAccessToken) {
+                $token->delete();
+            } elseif ($rawBearer = $request->bearerToken()) {
+                if ($rawBearer !== 'null' && $rawBearer !== 'undefined' && trim($rawBearer) !== '') {
+                    \Laravel\Sanctum\PersonalAccessToken::findToken($rawBearer)?->delete();
+                }
+            }
         }
 
         if ($request->hasSession()) {

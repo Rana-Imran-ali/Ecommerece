@@ -29,9 +29,6 @@ class AuthenticatedSessionController extends Controller
         $request->session()->regenerate();
 
         $user = $request->user();
-        $user->tokens()->where('name', 'web-session')->delete();
-        $token = $user->createToken('web-session')->plainTextToken;
-        $request->session()->put('api_token', $token);
 
         if ($user->isAdmin()) {
             return redirect()->intended(route('admin.dashboard', absolute: false));
@@ -45,11 +42,6 @@ class AuthenticatedSessionController extends Controller
      */
     public function destroy(Request $request): RedirectResponse
     {
-        if ($token = $request->session()->get('api_token')) {
-            $accessToken = \Laravel\Sanctum\PersonalAccessToken::findToken($token);
-            $accessToken?->delete();
-        }
-
         Auth::guard('web')->logout();
 
         $request->session()->invalidate();

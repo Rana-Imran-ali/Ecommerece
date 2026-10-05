@@ -3,15 +3,16 @@
 @section('title', 'Checkout - ' . config('app.name', 'EStore'))
 
 @section('content')
-<div class="space-y-6 max-w-5xl mx-auto">
+<div class="space-y-8 max-w-5xl mx-auto">
     <!-- Breadcrumb / Header -->
-    <div class="flex items-center justify-between border-b border-gray-200 pb-4">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 pb-5">
         <div>
-            <h1 class="text-2xl font-bold text-gray-900 tracking-tight">Order Checkout</h1>
-            <p class="text-sm text-gray-500">Confirm address, choose payment, and complete your order.</p>
+            <span class="text-xs font-bold text-blue-600 uppercase tracking-wider">Fast &amp; Encrypted</span>
+            <h1 class="text-2xl sm:text-3xl font-extrabold text-navy-950 tracking-tight mt-0.5">Order Checkout</h1>
+            <p class="text-sm text-slate-500 mt-1">Confirm address, choose payment, and complete your order.</p>
         </div>
-        <a href="{{ url('/cart') }}" class="text-sm font-medium text-indigo-600 hover:text-indigo-800">
-            &larr; Back to Cart
+        <a href="{{ url('/cart') }}" class="text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors inline-flex items-center gap-1.5 self-start sm:self-auto">
+            &larr; Return to Shopping Bag
         </a>
     </div>
 
@@ -20,9 +21,9 @@
 
     <!-- Checkout Main Grid -->
     <div id="checkout-content" class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div class="col-span-full py-16 text-center text-gray-500 bg-white rounded-lg border border-gray-200">
-            <div class="inline-block animate-spin w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full mb-2"></div>
-            <div>Preparing checkout details...</div>
+        <div class="col-span-full py-16 text-center text-slate-500 bg-white rounded-3xl border border-slate-200 shadow-sm animate-pulse">
+            <div class="inline-block animate-spin w-7 h-7 border-3 border-blue-600 border-t-transparent rounded-full mb-3"></div>
+            <div class="text-sm font-bold text-navy-950">Preparing secure checkout...</div>
         </div>
     </div>
 </div>
@@ -92,30 +93,33 @@
             <div class="lg:col-span-2 space-y-6">
 
                 <!-- 1. Shipping Address -->
-                <div class="bg-white p-6 rounded-lg border border-gray-200 space-y-4">
-                    <div class="flex items-center justify-between border-b border-gray-100 pb-3">
-                        <h2 class="text-base font-bold text-gray-900">1. Select Delivery Address</h2>
-                        <a href="/addresses" class="text-xs text-indigo-600 hover:underline">+ Manage Addresses</a>
+                <div class="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200/90 shadow-sm space-y-4">
+                    <div class="flex items-center justify-between border-b border-slate-100 pb-3.5">
+                        <div>
+                            <span class="text-[11px] font-bold text-blue-600 uppercase tracking-wider">Step 1</span>
+                            <h2 class="text-base font-extrabold text-navy-950">Delivery Address</h2>
+                        </div>
+                        <a href="/addresses" class="text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors">+ Manage Addresses</a>
                     </div>
 
                     ${userAddresses.length === 0 ? `
-                        <div class="p-4 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-800">
-                            No saved addresses found. <a href="/addresses" class="font-bold underline">Add an address</a> to proceed.
+                        <div class="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-xs font-semibold text-amber-800">
+                            No saved addresses found. <a href="/addresses" class="font-bold underline text-amber-900">Add an address</a> to proceed with order delivery.
                         </div>
                     ` : `
                         <div class="space-y-3">
                             ${userAddresses.map((addr, idx) => {
                                 const isChecked = Boolean(addr.is_default) || idx === 0;
                                 return `
-                                    <label class="flex items-start p-3.5 border rounded-lg cursor-pointer transition-colors ${isChecked ? 'border-indigo-600 bg-indigo-50/20' : 'border-gray-200 hover:bg-gray-50'}">
-                                        <input type="radio" name="selected_address" value="${addr.id}" ${isChecked ? 'checked' : ''} class="mt-1 text-indigo-600 focus:ring-indigo-500">
+                                    <label class="flex items-start p-4 border rounded-2xl cursor-pointer transition-all ${isChecked ? 'border-2 border-blue-600 bg-blue-50/30 shadow-2xs' : 'border border-slate-200 hover:bg-slate-50'}">
+                                        <input type="radio" name="selected_address" value="${addr.id}" ${isChecked ? 'checked' : ''} class="mt-1 text-blue-600 focus:ring-blue-500">
                                         <div class="ml-3 text-sm">
-                                            <div class="font-bold text-gray-900 flex items-center space-x-2">
+                                            <div class="font-bold text-navy-950 flex items-center space-x-2">
                                                 <span>${addr.name}</span>
-                                                ${addr.is_default ? '<span class="px-1.5 py-0.2 text-[10px] bg-indigo-100 text-indigo-800 font-semibold rounded">DEFAULT</span>' : ''}
+                                                ${addr.is_default ? '<span class="px-2 py-0.5 text-[10px] bg-blue-100 text-blue-800 font-bold rounded-full">DEFAULT</span>' : ''}
                                             </div>
-                                            <p class="text-gray-600 mt-0.5">${addr.address_line1}${addr.address_line2 ? ', ' + addr.address_line2 : ''}, ${addr.city}, ${addr.state} ${addr.postal_code}</p>
-                                            <p class="text-xs text-gray-400">Phone: ${addr.phone}</p>
+                                            <p class="text-slate-600 mt-1 text-xs leading-relaxed">${addr.address_line1}${addr.address_line2 ? ', ' + addr.address_line2 : ''}, ${addr.city}, ${addr.state} ${addr.postal_code}</p>
+                                            <p class="text-xs text-slate-400 mt-0.5 font-semibold">Contact: ${addr.phone}</p>
                                         </div>
                                     </label>
                                 `;
@@ -125,19 +129,22 @@
                 </div>
 
                 <!-- 2. Order Notification Email -->
-                <div class="bg-white p-6 rounded-lg border border-gray-200 space-y-3">
-                    <div class="flex items-center justify-between border-b border-gray-100 pb-3">
-                        <h2 class="text-base font-bold text-gray-900">2. Order Notification Email</h2>
-                        <span class="text-xs text-indigo-600 font-medium flex items-center gap-1">
+                <div class="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200/90 shadow-sm space-y-4">
+                    <div class="flex items-center justify-between border-b border-slate-100 pb-3.5">
+                        <div>
+                            <span class="text-[11px] font-bold text-blue-600 uppercase tracking-wider">Step 2</span>
+                            <h2 class="text-base font-extrabold text-navy-950">Tracking Updates Email</h2>
+                        </div>
+                        <span class="text-xs text-blue-600 font-bold flex items-center gap-1">
                             <span>📧</span> Automated Updates
                         </span>
                     </div>
-                    <p class="text-xs text-gray-500 leading-relaxed">
+                    <p class="text-xs text-slate-500 leading-relaxed">
                         We will automatically send real-time order tracking updates (<strong>Pending, Confirmed/Processing, Out for Delivery, and Delivered</strong>) including the <strong>expected delivery date</strong> to this email address.
                     </p>
                     <div>
-                        <label for="customer-email" class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
-                            Recipient Email Address <span class="text-red-500">*</span>
+                        <label for="customer-email" class="block text-xs font-bold text-navy-950 uppercase tracking-wider mb-1.5">
+                            Recipient Email Address <span class="text-rose-500">*</span>
                         </label>
                         <input type="email"
                                id="customer-email"
@@ -145,42 +152,45 @@
                                value="${userEmail}"
                                required
                                placeholder="your.email@example.com"
-                               class="w-full px-3.5 py-2.5 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors">
-                        <p class="text-[11px] text-gray-400 mt-1">Pre-filled with your account email. You may change it to receive notifications at an alternate address.</p>
+                               class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-navy-950 font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors">
+                        <p class="text-[11px] text-slate-400 mt-1">Pre-filled with your account email. You may change it to receive notifications at an alternate address.</p>
                     </div>
                 </div>
 
                 <!-- 3. Payment Method -->
-                <div class="bg-white p-6 rounded-lg border border-gray-200 space-y-4">
-                    <h2 class="text-base font-bold text-gray-900 border-b border-gray-100 pb-3">3. Payment Method</h2>
+                <div class="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200/90 shadow-sm space-y-4">
+                    <div class="border-b border-slate-100 pb-3.5">
+                        <span class="text-[11px] font-bold text-blue-600 uppercase tracking-wider">Step 3</span>
+                        <h2 class="text-base font-extrabold text-navy-950">Choose Payment Method</h2>
+                    </div>
                     <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <label id="pm-label-cod"
-                               class="flex items-center p-3 border-2 border-indigo-600 bg-indigo-50/20 rounded-lg cursor-pointer transition-all">
+                               class="flex items-center p-3.5 border-2 border-blue-600 bg-blue-50/40 rounded-2xl cursor-pointer transition-all shadow-2xs">
                             <input type="radio" id="pm-cod" name="payment_method" value="cod" checked
-                                   class="text-indigo-600 focus:ring-indigo-500" onchange="onPaymentMethodChange()">
-                            <span class="ml-2.5 text-sm font-semibold text-gray-800">💵 Cash on Delivery</span>
+                                   class="text-blue-600 focus:ring-blue-500" onchange="onPaymentMethodChange()">
+                            <span class="ml-2.5 text-xs font-bold text-navy-950">💵 Cash on Delivery</span>
                         </label>
                         <label id="pm-label-card"
-                               class="flex items-center p-3 border-2 border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 transition-all">
+                               class="flex items-center p-3.5 border-2 border-slate-200 rounded-2xl cursor-pointer hover:bg-slate-50 transition-all">
                             <input type="radio" id="pm-card" name="payment_method" value="card"
-                                   class="text-indigo-600 focus:ring-indigo-500" onchange="onPaymentMethodChange()">
-                            <span class="ml-2.5 text-sm font-semibold text-gray-800">💳 Credit / Debit Card</span>
+                                   class="text-blue-600 focus:ring-blue-500" onchange="onPaymentMethodChange()">
+                            <span class="ml-2.5 text-xs font-bold text-navy-950">💳 Credit / Debit Card</span>
                         </label>
                         <label id="pm-label-bank"
-                               class="flex items-center p-3 border-2 border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 transition-all">
+                               class="flex items-center p-3.5 border-2 border-slate-200 rounded-2xl cursor-pointer hover:bg-slate-50 transition-all">
                             <input type="radio" id="pm-bank" name="payment_method" value="bank_transfer"
-                                   class="text-indigo-600 focus:ring-indigo-500" onchange="onPaymentMethodChange()">
-                            <span class="ml-2.5 text-sm font-semibold text-gray-800">🏦 Bank Transfer</span>
+                                   class="text-blue-600 focus:ring-blue-500" onchange="onPaymentMethodChange()">
+                            <span class="ml-2.5 text-xs font-bold text-navy-950">🏦 Bank Transfer</span>
                         </label>
                     </div>
 
                     <!-- Card Details Panel -->
-                    <div id="card-details-panel" class="hidden mt-4 space-y-4 bg-gradient-to-br from-slate-50 to-indigo-50/30 border border-indigo-100 rounded-xl p-5">
+                    <div id="card-details-panel" class="hidden mt-4 space-y-4 bg-slate-50/90 border border-blue-100 rounded-2xl p-6">
                         <div class="flex items-center justify-between">
-                            <h3 class="text-sm font-bold text-gray-800">🔒 Secure Card Details</h3>
-                            <div class="flex items-center space-x-2 text-xs text-gray-400">
-                                <svg class="w-3.5 h-3.5 text-green-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"/></svg>
-                                256-bit SSL
+                            <h3 class="text-xs font-bold text-navy-950 uppercase tracking-wider">🔒 Secure Card Details</h3>
+                            <div class="flex items-center space-x-1.5 text-xs font-semibold text-slate-500">
+                                <svg class="w-3.5 h-3.5 text-emerald-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"/></svg>
+                                <span>256-bit SSL</span>
                             </div>
                         </div>
 
@@ -189,33 +199,33 @@
 
                         <!-- Cardholder Name -->
                         <div>
-                            <label class="block text-xs font-semibold text-gray-600 mb-1">Cardholder Full Name <span class="text-red-500">*</span></label>
+                            <label class="block text-xs font-bold text-navy-950 uppercase tracking-wider mb-1">Cardholder Full Name <span class="text-rose-500">*</span></label>
                             <input type="text" id="cardholder-name"
                                    placeholder="Name as it appears on card"
                                    oninput="clearPaymentErrors()"
-                                   class="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition">
-                            <p id="cardholder-name-error" class="text-red-600 text-xs mt-1 hidden"></p>
+                                   class="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 transition font-medium">
+                            <p id="cardholder-name-error" class="text-rose-600 text-xs mt-1 hidden font-semibold"></p>
                         </div>
 
                         <!-- Stripe Card Element -->
                         <div>
-                            <label class="block text-xs font-semibold text-gray-600 mb-1">Card Number, Expiry &amp; CVV <span class="text-red-500">*</span></label>
+                            <label class="block text-xs font-bold text-navy-950 uppercase tracking-wider mb-1">Card Number, Expiry &amp; CVV <span class="text-rose-500">*</span></label>
                             <div id="stripe-card-element"
-                                 class="px-3 py-3 border border-gray-300 rounded-lg bg-white focus-within:ring-2 focus-within:ring-indigo-400 transition min-h-[42px]"></div>
-                            <div id="card-errors" class="text-red-600 text-xs mt-2 hidden"></div>
+                                 class="px-3.5 py-3 border border-slate-200 rounded-xl bg-white focus-within:ring-2 focus-within:ring-blue-500 transition min-h-[44px]"></div>
+                            <div id="card-errors" class="text-rose-600 text-xs mt-2 hidden font-semibold"></div>
                         </div>
 
                         <!-- Accepted cards -->
-                        <div class="flex items-center space-x-2 text-xs text-gray-400">
+                        <div class="flex items-center space-x-2 text-xs text-slate-400">
                             <span>Accepted:</span>
-                            <span class="font-bold text-gray-600">VISA</span>
-                            <span class="font-bold text-gray-600">Mastercard</span>
-                            <span class="font-bold text-gray-600">Amex</span>
-                            <span class="font-bold text-gray-600">Discover</span>
+                            <span class="font-bold text-slate-600">VISA</span>
+                            <span class="font-bold text-slate-600">Mastercard</span>
+                            <span class="font-bold text-slate-600">Amex</span>
+                            <span class="font-bold text-slate-600">Discover</span>
                         </div>
 
                         <!-- Processing status -->
-                        <div id="card-processing-status" class="hidden text-xs text-indigo-600 font-medium animate-pulse">
+                        <div id="card-processing-status" class="hidden text-xs text-blue-600 font-bold animate-pulse">
                             🔐 Verifying card securely...
                         </div>
                     </div>
@@ -280,51 +290,57 @@
                 </div>
 
                 <!-- 3. Promo Code / Coupon (Optional) -->
-                <div class="bg-white p-6 rounded-lg border border-gray-200 space-y-3">
+                <div class="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200/90 shadow-sm space-y-3">
                     <div class="flex items-center justify-between">
-                        <h2 class="text-base font-bold text-gray-900">3. Promo Code / Coupon <span class="ml-1 text-xs font-normal text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">Optional</span></h2>
-                        <button type="button" onclick="openCouponsModal()" class="text-xs text-indigo-600 font-semibold hover:underline flex items-center gap-1">
-                            🏷️ View Available Coupons
+                        <div>
+                            <span class="text-[11px] font-bold text-blue-600 uppercase tracking-wider">Discounts</span>
+                            <h2 class="text-base font-extrabold text-navy-950">Promo Code &amp; Vouchers <span class="ml-1 text-[11px] font-semibold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">Optional</span></h2>
+                        </div>
+                        <button type="button" onclick="openCouponsModal()" class="text-xs text-blue-600 font-bold hover:underline flex items-center gap-1">
+                            🏷️ View Coupons
                         </button>
                     </div>
-                    <div class="flex items-center space-x-2">
+                    <div class="flex items-center space-x-2 pt-1">
                         <input type="text" id="coupon-code-input"
                                value="${appliedCoupon ? appliedCoupon.code : ''}"
                                placeholder="e.g. WELCOME10, SUPER20"
-                               class="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm outline-none focus:ring-1 focus:ring-indigo-500 uppercase font-mono">
+                               class="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 uppercase font-mono font-bold text-navy-950">
                         ${appliedCoupon ? `
-                            <button type="button" onclick="removeCoupon()" class="px-3 py-2 bg-red-100 hover:bg-red-200 text-red-700 text-sm font-semibold rounded-md transition-colors flex items-center space-x-1">
+                            <button type="button" onclick="removeCoupon()" class="px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold rounded-xl transition-colors flex items-center space-x-1 border border-rose-200">
                                 <span>✕</span><span>Remove</span>
                             </button>
                         ` : `
-                            <button type="button" onclick="applyCoupon()" class="px-4 py-2 bg-gray-800 hover:bg-gray-900 text-white text-sm font-semibold rounded-md transition-colors">
+                            <button type="button" onclick="applyCoupon()" class="px-5 py-2.5 bg-navy-950 hover:bg-navy-900 text-white text-xs font-bold rounded-xl transition-all shadow-sm">
                                 Apply
                             </button>
                         `}
                     </div>
                     <div id="coupon-status" class="text-xs">
                         ${appliedCoupon
-                            ? `<span class="text-green-600 font-medium">✓ Coupon "${appliedCoupon.code}" applied! Saved $${parseFloat(appliedCoupon.discount_amount).toFixed(2)}</span>`
-                            : '<span class="text-gray-400">Skip this field if you don\'t have a coupon code.</span>'
+                            ? `<span class="text-emerald-600 font-bold">✓ Coupon "${appliedCoupon.code}" applied! Saved $${parseFloat(appliedCoupon.discount_amount).toFixed(2)}</span>`
+                            : '<span class="text-slate-400">Enter a code if available, or continue without one.</span>'
                         }
                     </div>
                 </div>
 
                 <!-- Available Coupons Modal -->
-                <div id="coupons-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-                    <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[80vh] flex flex-col">
-                        <div class="flex items-center justify-between p-5 border-b border-gray-100">
-                            <h3 class="text-base font-bold text-gray-900">🏷️ Available Coupons</h3>
-                            <button type="button" onclick="closeCouponsModal()" class="text-gray-400 hover:text-gray-700 text-xl font-bold leading-none">&times;</button>
+                <div id="coupons-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+                    <div class="bg-white rounded-3xl shadow-2xl max-w-md w-full max-h-[80vh] flex flex-col overflow-hidden border border-slate-100">
+                        <div class="flex items-center justify-between p-6 border-b border-slate-100 bg-slate-50">
+                            <div>
+                                <span class="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Promotions</span>
+                                <h3 class="text-base font-extrabold text-navy-950">Available Coupons</h3>
+                            </div>
+                            <button type="button" onclick="closeCouponsModal()" class="text-slate-400 hover:text-slate-700 text-2xl font-bold leading-none">&times;</button>
                         </div>
-                        <div id="coupons-modal-body" class="overflow-y-auto p-5 space-y-3 flex-1">
-                            <div class="text-center text-sm text-gray-400 py-8">
-                                <div class="inline-block animate-spin w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full mb-2"></div>
+                        <div id="coupons-modal-body" class="overflow-y-auto p-6 space-y-3 flex-1">
+                            <div class="text-center text-sm text-slate-400 py-8">
+                                <div class="inline-block animate-spin w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full mb-2"></div>
                                 <div>Loading coupons…</div>
                             </div>
                         </div>
-                        <div class="p-4 border-t border-gray-100 text-xs text-gray-400 text-center">
-                            Click any coupon to apply it instantly.
+                        <div class="p-4 border-t border-slate-100 text-xs text-slate-400 text-center font-semibold bg-slate-50">
+                            Click any coupon to apply it instantly to your order.
                         </div>
                     </div>
                 </div>
@@ -332,37 +348,37 @@
 
             <!-- Right 1 Col: Order Summary & Place Order Button -->
             <div class="lg:col-span-1 space-y-4">
-                <div class="bg-white p-6 rounded-lg border border-gray-200 space-y-4 sticky top-4">
-                    <h2 class="text-base font-bold text-gray-900 border-b border-gray-100 pb-3">Order Summary</h2>
+                <div class="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200/90 space-y-4 sticky top-24 shadow-sm">
+                    <h2 class="text-base font-extrabold text-navy-950 border-b border-slate-100 pb-3">Order Summary</h2>
 
                     <!-- Items Preview -->
-                    <div class="max-h-48 overflow-y-auto divide-y divide-gray-100 pr-1">
+                    <div class="max-h-48 overflow-y-auto divide-y divide-slate-100 pr-1">
                         ${checkoutCart.items.map(item => `
-                            <div class="py-2 flex items-center justify-between text-xs">
-                                <span class="text-gray-800 font-medium truncate max-w-[150px]">${item.product?.name || 'Product'} &times; ${item.quantity}</span>
-                                <span class="text-gray-900 font-bold">$${(parseFloat(item.product?.price || 0) * item.quantity).toFixed(2)}</span>
+                            <div class="py-2.5 flex items-center justify-between text-xs">
+                                <span class="text-slate-700 font-semibold truncate max-w-[150px]">${item.product?.name || 'Product'} &times; ${item.quantity}</span>
+                                <span class="text-navy-950 font-bold">$${(parseFloat(item.product?.price || 0) * item.quantity).toFixed(2)}</span>
                             </div>
                         `).join('')}
                     </div>
 
-                    <div class="border-t border-gray-100 pt-3 space-y-2 text-sm text-gray-600">
+                    <div class="border-t border-slate-100 pt-3 space-y-2 text-xs font-semibold text-slate-600">
                         <div class="flex justify-between">
                             <span>Subtotal:</span>
-                            <span class="font-semibold text-gray-900">$${subtotal.toFixed(2)}</span>
+                            <span class="font-bold text-navy-950">$${subtotal.toFixed(2)}</span>
                         </div>
                         ${discount > 0 ? `
-                            <div class="flex justify-between text-green-600 font-medium">
+                            <div class="flex justify-between text-emerald-600 font-bold">
                                 <span>Discount (${appliedCoupon.code}):</span>
                                 <span>-$${discount.toFixed(2)}</span>
                             </div>
                         ` : ''}
                         <div class="flex justify-between">
                             <span>Shipping:</span>
-                            <span class="text-green-600 font-semibold">FREE</span>
+                            <span class="text-emerald-600 font-bold">FREE</span>
                         </div>
-                        <div class="border-t border-gray-100 pt-2 flex justify-between text-base font-bold text-gray-900">
+                        <div class="border-t border-slate-100 pt-3 flex justify-between text-base font-extrabold text-navy-950">
                             <span>Grand Total:</span>
-                            <span id="summary-total" class="text-indigo-600">$${finalTotal}</span>
+                            <span id="summary-total" class="text-blue-700 text-xl font-extrabold">$${finalTotal}</span>
                         </div>
                     </div>
 
@@ -371,11 +387,11 @@
 
                     <button type="button" id="place-order-btn" onclick="submitOrder()"
                             ${userAddresses.length === 0 ? 'disabled' : ''}
-                            class="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white text-sm font-bold rounded-md shadow-sm transition-colors">
+                            class="w-full py-3.5 px-4 bg-gradient-to-r from-blue-700 via-blue-600 to-indigo-600 hover:brightness-110 disabled:bg-slate-200 disabled:cursor-not-allowed text-white text-xs font-bold rounded-xl shadow-md shadow-blue-700/20 transition-all cursor-pointer">
                         Place Order Now
                     </button>
 
-                    <p class="text-center text-xs text-gray-400">🔒 Secure Checkout · All data encrypted</p>
+                    <p class="text-center text-[11px] font-semibold text-slate-400">🔒 256-bit Secure Checkout &bull; Encrypted</p>
                 </div>
             </div>
         `;
@@ -595,11 +611,11 @@
             if (!label) return;
             const val   = id === 'bank' ? 'bank_transfer' : id;
             if (val === method) {
-                label.classList.remove('border-gray-200');
-                label.classList.add('border-indigo-600', 'bg-indigo-50/20');
+                label.classList.remove('border-slate-200');
+                label.classList.add('border-blue-600', 'bg-blue-50/40', 'shadow-2xs');
             } else {
-                label.classList.remove('border-indigo-600', 'bg-indigo-50/20');
-                label.classList.add('border-gray-200');
+                label.classList.remove('border-blue-600', 'bg-blue-50/40', 'shadow-2xs');
+                label.classList.add('border-slate-200');
             }
         });
     }

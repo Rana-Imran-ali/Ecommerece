@@ -3,15 +3,16 @@
 @section('title', 'My Wishlist - ' . config('app.name', 'EStore'))
 
 @section('content')
-<div class="space-y-6">
+<div class="space-y-8">
     <!-- Header -->
-    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 pb-5">
         <div>
-            <h1 class="text-2xl font-bold text-gray-900 tracking-tight">Saved Wishlist</h1>
-            <p class="text-sm text-gray-500">View bookmarked products and move them to your active cart.</p>
+            <span class="text-xs font-bold text-blue-600 uppercase tracking-wider">Saved For Later</span>
+            <h1 class="text-2xl sm:text-3xl font-extrabold text-navy-950 tracking-tight mt-0.5">My Wishlist</h1>
+            <p class="text-sm text-slate-500 mt-1">View bookmarked products and move them to your active shopping bag.</p>
         </div>
         <button type="button" id="clear-wishlist-btn" onclick="clearWholeWishlist()"
-                class="hidden text-sm font-medium text-red-600 hover:text-red-800 transition-colors">
+                class="hidden text-xs font-bold text-rose-600 hover:text-rose-800 transition-colors px-3 py-1.5 rounded-xl border border-rose-200 hover:bg-rose-50 self-start sm:self-auto">
             Clear Wishlist
         </button>
     </div>
@@ -21,8 +22,8 @@
 
     <!-- Wishlist Container Grid -->
     <div id="wishlist-container" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-        <div class="col-span-full py-16 text-center text-gray-500 bg-white rounded-xl border border-gray-200">
-            <div class="text-sm font-medium">Loading saved wishlist items...</div>
+        <div class="col-span-full py-16 text-center text-slate-400 bg-white rounded-2xl border border-slate-200 animate-pulse">
+            <div class="text-sm font-semibold">Loading saved wishlist items...</div>
         </div>
     </div>
 </div>
@@ -33,10 +34,14 @@
     async function loadWishlist() {
         if (!getAuthToken()) {
             document.getElementById('wishlist-container').innerHTML = `
-                <div class="col-span-full p-12 text-center bg-white rounded-xl border border-gray-200 space-y-4">
-                    <p class="text-lg font-semibold text-gray-800">Please sign in to view your wishlist</p>
-                    <a href="/login?redirect=/wishlist" class="inline-block px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg shadow-xs">
-                        Sign In Now
+                <div class="col-span-full p-12 text-center bg-white rounded-3xl border border-slate-200 space-y-4 shadow-sm">
+                    <div class="w-12 h-12 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center mx-auto">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
+                    </div>
+                    <p class="text-lg font-bold text-navy-950">Please sign in to view your wishlist</p>
+                    <p class="text-xs text-slate-500 max-w-sm mx-auto">Sign in to save items across sessions and get notified about restocks.</p>
+                    <a href="/login?redirect=/wishlist" class="inline-block px-6 py-3 bg-gradient-to-r from-blue-700 via-blue-600 to-indigo-600 hover:brightness-110 text-white text-xs font-bold rounded-xl shadow-md shadow-blue-700/20 transition-all">
+                        Sign In Now &rarr;
                     </a>
                 </div>
             `;
@@ -49,7 +54,7 @@
 
         if (!res.ok) {
             container.innerHTML = `
-                <div class="col-span-full p-8 text-center bg-white rounded-xl border border-red-200 text-red-600">
+                <div class="col-span-full p-8 text-center bg-white rounded-2xl border border-rose-200 text-rose-600">
                     Failed to load wishlist: ${res.data?.message || 'Server error'}
                 </div>
             `;
@@ -61,12 +66,14 @@
         if (items.length === 0) {
             clearBtn.classList.add('hidden');
             container.innerHTML = `
-                <div class="col-span-full p-16 text-center bg-white rounded-xl border border-gray-200 space-y-4 shadow-xs">
-                    <svg class="mx-auto w-12 h-12 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
-                    <h3 class="text-lg font-bold text-gray-800">Your wishlist is empty</h3>
-                    <p class="text-sm text-gray-500">Save your favorite items here while exploring the store.</p>
-                    <a href="/products" class="inline-block px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg shadow-xs">
-                        Discover Products
+                <div class="col-span-full p-16 text-center bg-white rounded-3xl border border-slate-200 space-y-4 shadow-sm">
+                    <div class="w-16 h-16 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
+                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
+                    </div>
+                    <h3 class="text-xl font-extrabold text-navy-950">Your wishlist is empty</h3>
+                    <p class="text-xs text-slate-500 max-w-sm mx-auto">Save your favorite items here while exploring our product collections.</p>
+                    <a href="/products" class="inline-block px-6 py-3 bg-gradient-to-r from-blue-700 via-blue-600 to-indigo-600 hover:brightness-110 text-white text-xs font-bold rounded-xl shadow-md shadow-blue-700/20 transition-all">
+                        Discover Products &rarr;
                     </a>
                 </div>
             `;
@@ -83,31 +90,31 @@
             const inStock = (p.stock ?? 0) > 0;
 
             return `
-                <div class="bg-white rounded-xl border border-gray-200 overflow-hidden flex flex-col justify-between hover:border-gray-300 shadow-xs">
+                <div class="bg-white rounded-2xl border border-slate-200/90 overflow-hidden flex flex-col justify-between hover:border-blue-300 hover:shadow-xl transition-all duration-300 group shadow-sm">
                     <div>
                         <!-- Image Container -->
-                        <div class="h-44 w-full bg-gray-50 flex items-center justify-center relative overflow-hidden">
+                        <div class="h-48 w-full bg-slate-50 flex items-center justify-center relative overflow-hidden">
                             ${img 
-                                ? `<img src="${img}" alt="${p.name}" class="h-full w-full object-cover">`
-                                : `<span class="text-xs text-gray-400">No Image</span>`}
+                                ? `<img src="${img}" alt="${p.name}" class="h-full w-full object-contain p-2 group-hover:scale-105 transition-transform duration-300">`
+                                : `<span class="text-xs text-slate-400">No Image</span>`}
                             <button type="button" onclick="removeWishlistItem(${item.id})"
-                                    class="absolute top-2 right-2 p-1.5 bg-white/90 hover:bg-white text-gray-400 hover:text-red-600 rounded-full shadow-xs transition-colors"
+                                    class="absolute top-2.5 right-2.5 p-2 bg-white/90 hover:bg-white text-slate-400 hover:text-rose-600 rounded-xl shadow-xs transition-colors"
                                     title="Remove from wishlist">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                             </button>
                         </div>
 
                         <!-- Content -->
-                        <div class="p-4">
-                            <div class="text-[11px] text-indigo-600 font-semibold uppercase tracking-wider mb-1">
-                                ${p.category?.name || 'General'}
+                        <div class="p-5">
+                            <div class="text-[11px] text-blue-600 font-bold uppercase tracking-wider mb-1">
+                                ${p.category?.name || 'General Item'}
                             </div>
-                            <h3 class="text-sm font-bold text-gray-900 line-clamp-1" title="${p.name}">
-                                <a href="/products/${p.id}" class="hover:text-indigo-600 transition-colors">${p.name}</a>
+                            <h3 class="text-sm font-bold text-navy-950 line-clamp-1 group-hover:text-blue-600 transition-colors" title="${p.name}">
+                                <a href="/products/${p.id}">${p.name}</a>
                             </h3>
-                            <div class="mt-2 flex items-center justify-between">
-                                <span class="text-base font-extrabold text-gray-900">$${parseFloat(p.price || 0).toFixed(2)}</span>
-                                <span class="text-xs ${inStock ? 'text-emerald-700 bg-emerald-50' : 'text-red-700 bg-red-50'} px-2 py-0.5 rounded-full font-semibold">
+                            <div class="mt-2.5 flex items-center justify-between">
+                                <span class="text-base font-extrabold text-navy-950">$${parseFloat(p.price || 0).toFixed(2)}</span>
+                                <span class="text-[11px] ${inStock ? 'text-emerald-800 bg-emerald-100 border border-emerald-200' : 'text-rose-800 bg-rose-100 border border-rose-200'} px-2.5 py-0.5 rounded-full font-bold">
                                     ${inStock ? `In Stock (${p.stock})` : 'Out of Stock'}
                                 </span>
                             </div>
@@ -115,10 +122,10 @@
                     </div>
 
                     <!-- Action -->
-                    <div class="p-4 pt-0">
+                    <div class="p-5 pt-0">
                         <button type="button" id="btn-move-${item.id}" onclick="moveToCart(${item.id}, ${p.id})"
                                 ${!inStock ? 'disabled' : ''}
-                                class="w-full py-2.5 px-3 text-xs font-bold rounded-lg text-white transition-colors ${inStock ? 'bg-indigo-600 hover:bg-indigo-700 shadow-xs' : 'bg-gray-300 cursor-not-allowed'}">
+                                class="w-full py-2.5 px-3 text-xs font-bold rounded-xl text-white transition-all ${inStock ? 'bg-gradient-to-r from-blue-700 via-blue-600 to-indigo-600 hover:brightness-110 shadow-md shadow-blue-700/20' : 'bg-slate-300 cursor-not-allowed'}">
                             ${inStock ? 'Move to Cart &rarr;' : 'Unavailable'}
                         </button>
                     </div>

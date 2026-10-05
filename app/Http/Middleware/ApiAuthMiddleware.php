@@ -5,18 +5,16 @@ namespace App\Http\Middleware;
 use Closure;
 use Illuminate\Http\Request;
 use Laravel\Sanctum\PersonalAccessToken;
+use Laravel\Sanctum\TransientToken;
 use Symfony\Component\HttpFoundation\Response;
 
 class ApiAuthMiddleware
 {
     /**
-     * Handle an incoming API request using Sanctum token verification.
+     * Handle an incoming API request using Sanctum token or stateful session verification.
      *
-     * Unlike the old system (Crypt + Cache blacklist), this checks the
-     * personal_access_tokens database table directly, so:
-     *  - Revoked tokens are truly deleted — cache flush cannot resurrect them.
-     *  - Each device has its own token row that can be deleted independently.
-     *  - last_used_at is updated on every authenticated request.
+     * - Bearer Token: resolves PersonalAccessToken, attaches token to user via withAccessToken($token).
+     * - Web Session (Sanctum Stateful): resolves user from web session, attaches TransientToken.
      */
     public function handle(Request $request, Closure $next): Response
     {
@@ -34,7 +32,7 @@ class ApiAuthMiddleware
                 if ($accessToken->expires_at && $accessToken->expires_at->isPast()) {
                     $accessToken->delete();
                 } else {
-                    $user = $accessToken->tokenable;
+                    $user = $accessToken->tokenable->withAccessToken($accessToken);
 
                     // Bind the resolved user to the request and the auth guard
                     $request->setUserResolver(fn () => $user);
@@ -48,9 +46,12 @@ class ApiAuthMiddleware
             }
         }
 
-        // Web session fallback: If the user is logged into the web browser session
+        // Web session fallback: If the user is logged into the web browser session (Sanctum stateful cookie approach)
         if (\Illuminate\Support\Facades\Auth::guard('web')->check() || $request->user()) {
             $user = \Illuminate\Support\Facades\Auth::guard('web')->user() ?? $request->user();
+            if ($user && method_exists($user, 'withAccessToken')) {
+                $user->withAccessToken(new TransientToken);
+            }
             $request->setUserResolver(fn () => $user);
             auth()->setUser($user);
 

@@ -5,229 +5,258 @@
 @push('styles')
 <style>
     :root {
-        --accent: #6366f1;
-        --accent-dark: #4f46e5;
-        --accent-light: #eef2ff;
+        --navy-950: #0a1128;
+        --navy-900: #0f1e4a;
+        --navy-800: #1a3369;
+        --blue-600: #2563eb;
+        --accent: #1d4ed8;
+        --accent-hover: #1e40af;
+        --accent-light: #eff6ff;
         --danger: #ef4444;
         --success: #10b981;
         --warn: #f59e0b;
     }
 
-    /* ── Layout ─────────────────────────────────────────── */
+    /* ── Layout ────────────────────────────────────────────────── */
     .account-wrap { display: flex; gap: 1.5rem; align-items: flex-start; }
 
-    /* ── Sidebar ─────────────────────────────────────────── */
+    /* ── Sidebar ────────────────────────────────────────────────── */
     .account-sidebar {
-        width: 240px;
+        width: 250px;
         flex-shrink: 0;
-        background: #fff;
-        border: 1px solid #e5e7eb;
-        border-radius: 14px;
+        background: var(--navy-950);
+        border-radius: 20px;
         overflow: hidden;
         position: sticky;
         top: 76px;
+        box-shadow: 0 20px 60px rgba(10,17,40,0.25);
     }
     .sidebar-header {
-        background: linear-gradient(135deg, var(--accent) 0%, var(--accent-dark) 100%);
-        padding: 1.5rem 1.25rem;
+        background: linear-gradient(160deg, var(--navy-900) 0%, var(--navy-950) 100%);
+        padding: 1.75rem 1.25rem 1.5rem;
         text-align: center;
+        border-bottom: 1px solid rgba(255,255,255,0.06);
     }
     .sidebar-avatar {
-        width: 72px; height: 72px;
+        width: 76px; height: 76px;
         border-radius: 50%;
-        border: 3px solid rgba(255,255,255,.4);
+        border: 3px solid rgba(255,255,255,.15);
         object-fit: cover;
-        margin: 0 auto 0.75rem;
+        margin: 0 auto 0.85rem;
         display: block;
-        background: rgba(255,255,255,.2);
+        background: rgba(255,255,255,.08);
     }
-    .sidebar-name { color:#fff; font-weight:700; font-size:.95rem; margin-bottom:.15rem; }
-    .sidebar-email { color:rgba(255,255,255,.75); font-size:.72rem; word-break:break-all; }
+    .sidebar-name { color:#fff; font-weight:800; font-size:.95rem; margin-bottom:.2rem; }
+    .sidebar-email { color:rgba(255,255,255,.5); font-size:.7rem; word-break:break-all; }
     .sidebar-nav { padding: .5rem 0; }
     .sidebar-nav-item {
-        display: flex; align-items: center; gap: .65rem;
+        display: flex; align-items: center; gap: .7rem;
         padding: .65rem 1.25rem;
-        font-size: .83rem; font-weight: 500; color: #4b5563;
+        font-size: .78rem; font-weight: 600; color: rgba(255,255,255,0.55);
         cursor: pointer; transition: all .15s;
         border-left: 3px solid transparent;
         text-decoration: none;
     }
-    .sidebar-nav-item:hover { background: var(--accent-light); color: var(--accent); }
-    .sidebar-nav-item.active { background: var(--accent-light); color: var(--accent); border-left-color: var(--accent); font-weight:600; }
-    .sidebar-nav-item svg { width: 16px; height: 16px; flex-shrink: 0; }
-    .sidebar-divider { height: 1px; background: #f3f4f6; margin: .4rem .75rem; }
-    .sidebar-logout { color: #ef4444 !important; }
-    .sidebar-logout:hover { background: #fef2f2 !important; }
+    .sidebar-nav-item:hover { background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.85); }
+    .sidebar-nav-item.active {
+        background: rgba(37,99,235,0.15);
+        color: #93c5fd;
+        border-left-color: var(--blue-600);
+        font-weight: 700;
+    }
+    .sidebar-nav-item svg { width: 15px; height: 15px; flex-shrink: 0; }
+    .sidebar-divider { height: 1px; background: rgba(255,255,255,0.06); margin: .35rem .75rem; }
+    .sidebar-logout { color: rgba(252,165,165,0.7) !important; }
+    .sidebar-logout:hover { background: rgba(239,68,68,0.1) !important; color: #fca5a5 !important; }
 
-    /* ── Main panel ─────────────────────────────────────── */
+    /* ── Count badges in sidebar ─────────────────────────────── */
+    .sidebar-count {
+        margin-left: auto;
+        font-size: .65rem; font-weight: 800;
+        padding: .15rem .5rem; border-radius: 999px;
+        background: rgba(255,255,255,0.1);
+        color: rgba(255,255,255,0.7);
+    }
+
+    /* ── Main panel ───────────────────────────────────────────── */
     .account-main { flex: 1; min-width: 0; }
     .account-section { display: none; }
     .account-section.active { display: block; }
 
-    /* ── Cards ───────────────────────────────────────────── */
+    /* ── Cards ───────────────────────────────────────────────── */
     .card {
-        background: #fff; border: 1px solid #e5e7eb;
-        border-radius: 14px; padding: 1.75rem;
+        background: #fff;
+        border: 1px solid rgba(0,0,0,0.06);
+        border-radius: 20px;
+        padding: 1.75rem;
         margin-bottom: 1.25rem;
+        box-shadow: 0 4px 20px rgba(10,17,40,0.04);
     }
     .card-title {
-        font-size: 1rem; font-weight: 700; color: #111827;
-        padding-bottom: .85rem; margin-bottom: 1rem;
-        border-bottom: 1px solid #f3f4f6;
+        font-size: .85rem; font-weight: 800; color: var(--navy-950);
+        padding-bottom: .85rem; margin-bottom: 1.25rem;
+        border-bottom: 1px solid #f1f5f9;
         display: flex; align-items: center; gap: .5rem;
+        text-transform: uppercase; letter-spacing: .04em;
     }
-    .card-title svg { width:18px; height:18px; color: var(--accent); }
+    .card-title svg { width:16px; height:16px; color: var(--blue-600); }
 
-    /* ── Overview stats ──────────────────────────────────── */
+    /* ── Overview stats ──────────────────────────────────────── */
     .stat-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 1rem; }
     .stat-card {
-        border-radius: 12px; padding: 1.25rem 1rem; text-align: center;
+        border-radius: 14px; padding: 1.25rem 1rem; text-align: center;
         background: var(--accent-light);
+        border: 1px solid rgba(37,99,235,0.1);
     }
-    .stat-num { font-size: 1.75rem; font-weight: 800; color: var(--accent); }
-    .stat-label { font-size: .72rem; color: #6b7280; font-weight: 600; text-transform: uppercase; margin-top: .2rem; }
+    .stat-num { font-size: 1.85rem; font-weight: 900; color: var(--accent); }
+    .stat-label { font-size: .68rem; color: #6b7280; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; margin-top: .25rem; }
 
-    /* ── Avatar upload ───────────────────────────────────── */
+    /* ── Avatar upload ───────────────────────────────────────── */
     .avatar-upload-area {
         display: flex; align-items: center; gap: 1.25rem;
-        padding: 1rem; background: #f9fafb; border-radius: 10px;
-        border: 1px dashed #d1d5db; margin-bottom: 1rem; cursor: pointer;
+        padding: 1rem 1.25rem; background: #f8fafc; border-radius: 12px;
+        border: 2px dashed #e2e8f0; margin-bottom: 1.25rem; cursor: pointer;
+        transition: border-color .15s;
     }
+    .avatar-upload-area:hover { border-color: var(--blue-600); }
     .avatar-preview {
         width: 72px; height: 72px; border-radius: 50%;
-        object-fit: cover; border: 2px solid #e5e7eb; flex-shrink:0;
+        object-fit: cover; border: 3px solid #e2e8f0; flex-shrink:0;
     }
-    .avatar-upload-label { font-size: .8rem; color: #6b7280; }
-    .avatar-upload-label strong { display:block; color: var(--accent); font-size: .85rem; }
+    .avatar-upload-label { font-size: .78rem; color: #6b7280; }
+    .avatar-upload-label strong { display:block; color: var(--accent); font-size: .82rem; margin-bottom:.15rem; }
 
-    /* ── Form controls ───────────────────────────────────── */
+    /* ── Form controls ──────────────────────────────────────── */
     .form-group { margin-bottom: 1rem; }
     .form-label {
-        display: block; font-size: .72rem; font-weight: 700;
-        color: #374151; text-transform: uppercase; letter-spacing: .04em;
-        margin-bottom: .35rem;
+        display: block; font-size: .68rem; font-weight: 800;
+        color: var(--navy-950); text-transform: uppercase; letter-spacing: .05em;
+        margin-bottom: .4rem;
     }
     .form-control {
-        width: 100%; padding: .6rem .85rem;
-        border: 1px solid #d1d5db; border-radius: 8px;
-        font-size: .875rem; color: #111827; outline: none;
+        width: 100%; padding: .65rem .9rem;
+        border: 1.5px solid #e2e8f0; border-radius: 10px;
+        font-size: .875rem; color: #0f172a; outline: none;
         transition: border-color .15s, box-shadow .15s;
         background: #fff;
     }
-    .form-control:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(99,102,241,.12); }
+    .form-control:focus { border-color: var(--blue-600); box-shadow: 0 0 0 3px rgba(37,99,235,.1); }
     .form-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
 
-    /* ── Buttons ─────────────────────────────────────────── */
+    /* ── Buttons ──────────────────────────────────────────────── */
     .btn {
         display: inline-flex; align-items: center; justify-content: center;
-        gap: .4rem; padding: .58rem 1.2rem;
-        font-size: .83rem; font-weight: 600; border-radius: 8px;
+        gap: .4rem; padding: .6rem 1.2rem;
+        font-size: .78rem; font-weight: 700; border-radius: 10px;
         cursor: pointer; transition: all .15s; border: none; outline: none;
     }
-    .btn-primary { background: var(--accent); color: #fff; }
-    .btn-primary:hover { background: var(--accent-dark); }
-    .btn-primary:disabled { opacity:.6; cursor:not-allowed; }
-    .btn-outline { background: #fff; color: #374151; border: 1px solid #d1d5db; }
-    .btn-outline:hover { background: #f9fafb; }
-    .btn-danger { background: #fef2f2; color: var(--danger); border: 1px solid #fecaca; }
+    .btn-primary { background: var(--navy-950); color: #fff; box-shadow: 0 4px 14px rgba(10,17,40,0.2); }
+    .btn-primary:hover { background: var(--navy-900); transform: translateY(-1px); }
+    .btn-primary:disabled { opacity:.6; cursor:not-allowed; transform:none; }
+    .btn-outline { background: #fff; color: #374151; border: 1.5px solid #e2e8f0; }
+    .btn-outline:hover { border-color: var(--navy-950); color: var(--navy-950); }
+    .btn-danger { background: #fef2f2; color: var(--danger); border: 1.5px solid #fecaca; }
     .btn-danger:hover { background: #fee2e2; }
     .btn-danger-solid { background: var(--danger); color: #fff; }
     .btn-danger-solid:hover { background: #dc2626; }
-    .btn-sm { padding: .38rem .85rem; font-size: .78rem; }
+    .btn-sm { padding: .38rem .85rem; font-size: .73rem; }
     .btn-full { width: 100%; }
 
-    /* ── Alert ───────────────────────────────────────────── */
+    /* ── Alert ────────────────────────────────────────────────── */
     .alert {
-        padding: .7rem 1rem; border-radius: 8px; font-size: .83rem;
-        font-weight: 500; margin-bottom: 1rem; display: flex; align-items:center; gap:.5rem;
+        padding: .75rem 1rem; border-radius: 10px; font-size: .8rem;
+        font-weight: 600; margin-bottom: 1rem; display: flex; align-items:center; gap:.5rem;
     }
     .alert-success { background: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
     .alert-danger  { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
     .alert-info    { background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; }
 
-    /* ── Badge ───────────────────────────────────────────── */
+    /* ── Badge ────────────────────────────────────────────────── */
     .badge {
         display: inline-flex; align-items:center;
-        padding: .2rem .6rem; border-radius: 999px;
-        font-size: .7rem; font-weight: 700; text-transform: uppercase;
+        padding: .2rem .65rem; border-radius: 999px;
+        font-size: .67rem; font-weight: 800; text-transform: uppercase; letter-spacing:.03em;
     }
-    .badge-pending          { background:#fef9c3; color:#854d0e; }
-    .badge-processing       { background:#dbeafe; color:#1e40af; }
-    .badge-out-for-delivery { background:#f3e8ff; color:#6b21a8; }
-    .badge-shipped          { background:#e0e7ff; color:#3730a3; }
-    .badge-delivered        { background:#d1fae5; color:#065f46; }
-    .badge-completed        { background:#dcfce7; color:#14532d; }
-    .badge-cancelled        { background:#fee2e2; color:#991b1b; }
+    .badge-pending          { background:#fefce8; color:#854d0e; border:1px solid #fde68a; }
+    .badge-processing       { background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; }
+    .badge-out-for-delivery { background:#faf5ff; color:#7e22ce; border:1px solid #e9d5ff; }
+    .badge-shipped          { background:#eef2ff; color:#3730a3; border:1px solid #c7d2fe; }
+    .badge-delivered        { background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0; }
+    .badge-completed        { background:#f0fdf4; color:#14532d; border:1px solid #bbf7d0; }
+    .badge-cancelled        { background:#fff1f2; color:#9f1239; border:1px solid #fecdd3; }
 
-    /* ── Order card ──────────────────────────────────────── */
+    /* ── Order card ─────────────────────────────────────────── */
     .order-card {
-        border: 1px solid #e5e7eb; border-radius: 10px;
+        border: 1.5px solid #e2e8f0; border-radius: 14px;
         padding: 1rem 1.25rem; margin-bottom: .75rem;
-        transition: border-color .15s;
+        transition: border-color .15s, box-shadow .15s;
     }
-    .order-card:hover { border-color: var(--accent); }
+    .order-card:hover { border-color: var(--navy-950); box-shadow: 0 4px 20px rgba(10,17,40,0.06); }
 
-    /* ── Wishlist grid ───────────────────────────────────── */
-    .wishlist-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px,1fr)); gap: 1rem; }
+    /* ── Wishlist grid ──────────────────────────────────────── */
+    .wishlist-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(155px,1fr)); gap: 1rem; }
     .wishlist-item {
-        border: 1px solid #e5e7eb; border-radius: 10px;
-        overflow: hidden; position: relative; transition: box-shadow .15s;
+        border: 1.5px solid #e2e8f0; border-radius: 14px;
+        overflow: hidden; position: relative; transition: box-shadow .15s, border-color .15s;
+        background: #fff;
     }
-    .wishlist-item:hover { box-shadow: 0 4px 16px rgba(0,0,0,.08); }
+    .wishlist-item:hover { box-shadow: 0 6px 20px rgba(10,17,40,0.08); border-color: var(--navy-950); }
     .wishlist-item img { width:100%; height:140px; object-fit:cover; }
-    .wishlist-item-body { padding: .65rem .75rem; }
+    .wishlist-item-body { padding: .7rem .8rem; }
     .wishlist-remove {
         position: absolute; top:.5rem; right:.5rem;
-        background: rgba(255,255,255,.9); border-radius: 50%;
-        width:26px; height:26px; display:flex; align-items:center;
-        justify-content:center; cursor:pointer; border:none;
+        background: rgba(255,255,255,.95); border-radius: 50%;
+        width:28px; height:28px; display:flex; align-items:center;
+        justify-content:center; cursor:pointer; border:1px solid #fecaca;
         color: #ef4444; transition: background .15s;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.1);
     }
     .wishlist-remove:hover { background: #fee2e2; }
 
-    /* ── Address card ────────────────────────────────────── */
+    /* ── Address card ────────────────────────────────────────── */
     .address-card {
-        border: 1px solid #e5e7eb; border-radius: 10px;
+        border: 1.5px solid #e2e8f0; border-radius: 14px;
         padding: 1rem 1.25rem; margin-bottom: .75rem;
         display:flex; align-items:flex-start; justify-content:space-between;
-        gap: 1rem; transition: border-color .15s;
+        gap: 1rem; transition: border-color .15s, box-shadow .15s;
     }
-    .address-card.default { border-color: var(--accent); background: var(--accent-light); }
-    .address-card .address-actions { display:flex; gap:.4rem; flex-shrink:0; }
+    .address-card.default { border-color: var(--navy-950); background: #f8fafc; }
+    .address-card .address-actions { display:flex; gap:.4rem; flex-shrink:0; flex-wrap:wrap; }
 
-    /* ── Password strength ───────────────────────────────── */
+    /* ── Password strength ──────────────────────────────────── */
     .strength-bar { height: 4px; border-radius: 4px; background: #e5e7eb; margin-top: .35rem; }
     .strength-bar-fill { height: 100%; border-radius: 4px; transition: width .3s, background .3s; width:0; }
 
-    /* ── Modal ───────────────────────────────────────────── */
+    /* ── Modal ───────────────────────────────────────────────── */
     .modal-backdrop {
-        position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:1000;
+        position:fixed; inset:0; background:rgba(10,17,40,.6); z-index:1000;
         display:none; align-items:center; justify-content:center; padding:1rem;
+        backdrop-filter: blur(4px);
     }
     .modal-backdrop.open { display:flex; }
     .modal-box {
-        background:#fff; border-radius:14px; padding:2rem;
-        max-width:440px; width:100%; box-shadow:0 20px 60px rgba(0,0,0,.2);
+        background:#fff; border-radius:20px; padding:2rem;
+        max-width:440px; width:100%; box-shadow:0 30px 80px rgba(10,17,40,0.25);
         animation: modalIn .2s ease;
     }
     @keyframes modalIn { from{transform:scale(.95);opacity:0} to{transform:scale(1);opacity:1} }
-    .modal-title { font-size:1.1rem; font-weight:700; color:#111827; margin-bottom:.35rem; }
-    .modal-desc  { font-size:.83rem; color:#6b7280; margin-bottom:1.25rem; }
+    .modal-title { font-size:1.05rem; font-weight:800; color:var(--navy-950); margin-bottom:.35rem; }
+    .modal-desc  { font-size:.78rem; color:#6b7280; margin-bottom:1.25rem; }
 
-    /* ── Tabs (mobile) ───────────────────────────────────── */
+    /* ── Tabs (mobile) ───────────────────────────────────────── */
     .mobile-tabs {
         display:none; overflow-x:auto; gap:.5rem; padding:.75rem 0;
-        border-bottom:1px solid #e5e7eb; margin-bottom:1rem; scrollbar-width:none;
+        border-bottom:1px solid #e2e8f0; margin-bottom:1rem; scrollbar-width:none;
     }
     .mobile-tabs::-webkit-scrollbar { display:none; }
     .mobile-tab {
         white-space:nowrap; padding:.45rem .9rem; border-radius:999px;
-        font-size:.78rem; font-weight:600; cursor:pointer;
-        background:#f3f4f6; color:#374151; border:none; transition:all .15s;
+        font-size:.73rem; font-weight:700; cursor:pointer;
+        background:#f1f5f9; color:#374151; border:none; transition:all .15s;
     }
-    .mobile-tab.active { background: var(--accent); color:#fff; }
+    .mobile-tab.active { background: var(--navy-950); color:#fff; }
 
-    /* ── Responsive ──────────────────────────────────────── */
+    /* ── Responsive ─────────────────────────────────────────── */
     @media(max-width:768px) {
         .account-wrap { flex-direction:column; }
         .account-sidebar { width:100%; position:static; display:none; }
@@ -239,19 +268,19 @@
         .stat-grid { grid-template-columns:1fr; }
     }
 
-    /* ── Spinner ─────────────────────────────────────────── */
+    /* ── Spinner ─────────────────────────────────────────────── */
     .spinner {
-        display:inline-block; width:18px; height:18px;
-        border:2px solid rgba(255,255,255,.4); border-top-color:#fff;
+        display:inline-block; width:16px; height:16px;
+        border:2px solid rgba(255,255,255,.3); border-top-color:#fff;
         border-radius:50%; animation:spin .7s linear infinite;
     }
     @keyframes spin { to { transform:rotate(360deg); } }
 
-    /* ── Empty state ─────────────────────────────────────── */
+    /* ── Empty state ─────────────────────────────────────────── */
     .empty-state { text-align:center; padding:3rem 1rem; }
-    .empty-state svg { width:48px; height:48px; color:#d1d5db; margin:0 auto .75rem; }
-    .empty-state h3 { font-size:1rem; font-weight:700; color:#374151; margin-bottom:.35rem; }
-    .empty-state p  { font-size:.83rem; color:#9ca3af; }
+    .empty-state svg { width:44px; height:44px; color:#cbd5e1; margin:0 auto .75rem; }
+    .empty-state h3 { font-size:.95rem; font-weight:800; color:var(--navy-950); margin-bottom:.35rem; }
+    .empty-state p  { font-size:.78rem; color:#94a3b8; }
 </style>
 @endpush
 
@@ -259,9 +288,9 @@
 <div class="max-w-6xl mx-auto">
 
     {{-- Page header --}}
-    <div class="mb-5">
-        <h1 class="text-2xl font-bold text-gray-900">My Account</h1>
-        <p class="text-sm text-gray-500">Manage your profile, orders, and preferences.</p>
+    <div class="mb-6">
+        <h1 class="text-3xl font-black text-navy-950">My Account</h1>
+        <p class="text-sm text-slate-500 mt-1">Manage your profile, orders, wishlist, addresses and security settings.</p>
     </div>
 
     {{-- Global alert --}}
@@ -280,7 +309,7 @@
 
     <div class="account-wrap">
 
-        {{-- ── Sidebar ────────────────────────────────────────── --}}
+        {{-- ── Sidebar ──────────────────────────────────────────── --}}
         <aside class="account-sidebar" id="account-sidebar">
             <div class="sidebar-header">
                 <img id="sb-avatar" src="" alt="Profile picture" class="sidebar-avatar">
@@ -304,12 +333,12 @@
                 <a class="sidebar-nav-item" data-section="orders">
                     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>
                     My Orders
-                    <span class="ml-auto text-xs font-bold bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full" id="sb-orders-count">0</span>
+                    <span class="sidebar-count" id="sb-orders-count">0</span>
                 </a>
                 <a class="sidebar-nav-item" data-section="wishlist">
                     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
                     Wishlist
-                    <span class="ml-auto text-xs font-bold bg-red-100 text-red-600 px-2 py-0.5 rounded-full" id="sb-wish-count">0</span>
+                    <span class="sidebar-count" id="sb-wish-count">0</span>
                 </a>
                 <a class="sidebar-nav-item" data-section="addresses">
                     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
@@ -327,10 +356,10 @@
             </nav>
         </aside>
 
-        {{-- ── Main panel ───────────────────────────────────── --}}
+        {{-- ── Main panel ────────────────────────────────────────── --}}
         <main class="account-main">
 
-            {{-- ══ OVERVIEW ════════════════════════════════════ --}}
+            {{-- ══ OVERVIEW ════════════════════════════════════════ --}}
             <div class="account-section active" id="section-overview">
                 <div class="card">
                     <div class="card-title">
@@ -338,14 +367,14 @@
                         Account Overview
                     </div>
 
-                    <div class="flex items-center gap-4 mb-5 p-4 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl border border-indigo-100">
-                        <img id="ov-avatar" src="" alt="" class="w-16 h-16 rounded-full object-cover border-2 border-indigo-200">
+                    <div class="flex items-center gap-4 mb-5 p-4 bg-gradient-to-br from-navy-975 via-navy-900 to-navy-950 rounded-2xl">
+                        <img id="ov-avatar" src="" alt="" class="w-16 h-16 rounded-full object-cover border-3 border-white/20 flex-shrink-0">
                         <div>
-                            <div class="text-lg font-bold text-gray-900" id="ov-name">—</div>
-                            <div class="text-sm text-gray-500" id="ov-email">—</div>
-                            <div class="text-xs text-gray-400 mt-1" id="ov-since">Member since —</div>
+                            <div class="text-base font-black text-white" id="ov-name">—</div>
+                            <div class="text-xs text-blue-200" id="ov-email">—</div>
+                            <div class="text-xs text-slate-400 mt-1" id="ov-since">Member since —</div>
                         </div>
-                        <button class="ml-auto btn btn-outline btn-sm" onclick="switchSection('profile')">Edit Profile</button>
+                        <button class="ml-auto btn btn-sm" style="background:rgba(255,255,255,0.1);color:rgba(255,255,255,0.85);border:1px solid rgba(255,255,255,0.15);" onclick="switchSection('profile')">Edit Profile</button>
                     </div>
 
                     <div class="stat-grid">
@@ -353,11 +382,11 @@
                             <div class="stat-num" id="ov-orders">—</div>
                             <div class="stat-label">Total Orders</div>
                         </div>
-                        <div class="stat-card" style="background:#fdf4ff;">
+                        <div class="stat-card" style="background:#faf5ff;border-color:rgba(147,51,234,0.1);">
                             <div class="stat-num" style="color:#9333ea;" id="ov-wishlist">—</div>
                             <div class="stat-label">Wishlist Items</div>
                         </div>
-                        <div class="stat-card" style="background:#f0fdf4;">
+                        <div class="stat-card" style="background:#f0fdf4;border-color:rgba(22,163,74,0.1);">
                             <div class="stat-num" style="color:#16a34a;" id="ov-addresses">—</div>
                             <div class="stat-label">Saved Addresses</div>
                         </div>
@@ -370,15 +399,15 @@
                         Recent Orders
                     </div>
                     <div id="ov-recent-orders">
-                        <div class="text-center py-8 text-gray-400 text-sm">Loading recent orders…</div>
+                        <div class="text-center py-8 text-slate-400 text-sm">Loading recent orders…</div>
                     </div>
-                    <div class="text-center mt-2">
-                        <button class="btn btn-outline btn-sm" onclick="switchSection('orders')">View All Orders →</button>
+                    <div class="text-center mt-3 pt-3 border-t border-slate-100">
+                        <button class="btn btn-outline btn-sm" onclick="switchSection('orders')">View All Orders &rarr;</button>
                     </div>
                 </div>
             </div>
 
-            {{-- ══ MY PROFILE ══════════════════════════════════ --}}
+            {{-- ══ MY PROFILE ════════════════════════════════════ --}}
             <div class="account-section" id="section-profile">
                 <div class="card">
                     <div class="card-title">
@@ -393,9 +422,9 @@
                         <img id="profile-avatar-preview" src="" alt="Your avatar" class="avatar-preview">
                         <div class="avatar-upload-label">
                             <strong>Click to change profile picture</strong>
-                            JPG, PNG, GIF or WebP · Max 2 MB
+                            JPG, PNG, GIF or WebP &middot; Max 2 MB
                         </div>
-                        <svg class="ml-auto w-5 h-5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                        <svg class="ml-auto w-5 h-5 text-slate-300 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
                     </div>
 
                     <form id="profile-form" onsubmit="handleUpdateProfile(event)">
@@ -418,7 +447,7 @@
                 </div>
             </div>
 
-            {{-- ══ CHANGE PASSWORD ══════════════════════════════ --}}
+            {{-- ══ CHANGE PASSWORD ════════════════════════════════ --}}
             <div class="account-section" id="section-password">
                 <div class="card">
                     <div class="card-title">
@@ -432,10 +461,10 @@
                             <input type="password" id="curr-pass" class="form-control" required placeholder="••••••••">
                         </div>
                         <div class="form-group">
-                            <label class="form-label" for="new-pass">New Password <span class="text-gray-400 normal-case font-normal">(min 6 chars)</span></label>
+                            <label class="form-label" for="new-pass">New Password <span class="text-slate-400 normal-case font-normal">(min 6 chars)</span></label>
                             <input type="password" id="new-pass" class="form-control" required minlength="6" placeholder="••••••••" oninput="updateStrength(this.value)">
                             <div class="strength-bar mt-2"><div class="strength-bar-fill" id="strength-fill"></div></div>
-                            <div class="text-xs mt-1 text-gray-400" id="strength-label"></div>
+                            <div class="text-xs mt-1 text-slate-400" id="strength-label"></div>
                         </div>
                         <div class="form-group">
                             <label class="form-label" for="conf-pass">Confirm New Password</label>
@@ -446,7 +475,7 @@
                 </div>
             </div>
 
-            {{-- ══ MY ORDERS ════════════════════════════════════ --}}
+            {{-- ══ MY ORDERS ══════════════════════════════════════ --}}
             <div class="account-section" id="section-orders">
                 <div class="card">
                     <div class="card-title">
@@ -455,43 +484,43 @@
                     </div>
                     <div id="orders-alert"></div>
                     <div id="orders-container">
-                        <div class="text-center py-8 text-gray-400 text-sm">Loading orders…</div>
+                        <div class="text-center py-8 text-slate-400 text-sm">Loading orders…</div>
                     </div>
                     <div id="orders-pagination" class="flex justify-center gap-2 mt-4"></div>
                 </div>
             </div>
 
-            {{-- ══ WISHLIST ══════════════════════════════════════ --}}
+            {{-- ══ WISHLIST ════════════════════════════════════════ --}}
             <div class="account-section" id="section-wishlist">
                 <div class="card">
                     <div class="card-title">
                         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
                         My Wishlist
-                        <button id="clear-wishlist-btn" class="ml-auto btn btn-outline btn-sm" onclick="clearWishlist()" style="display:none">Clear All</button>
+                        <button id="clear-wishlist-btn" class="ml-auto btn btn-danger btn-sm" onclick="clearWishlist()" style="display:none">Clear All</button>
                     </div>
                     <div id="wishlist-alert"></div>
                     <div id="wishlist-container" class="wishlist-grid">
-                        <div class="col-span-full text-center py-8 text-gray-400 text-sm">Loading wishlist…</div>
+                        <div class="col-span-full text-center py-8 text-slate-400 text-sm">Loading wishlist…</div>
                     </div>
                 </div>
             </div>
 
-            {{-- ══ ADDRESSES ════════════════════════════════════ --}}
+            {{-- ══ ADDRESSES ══════════════════════════════════════ --}}
             <div class="account-section" id="section-addresses">
                 <div class="card">
                     <div class="card-title">
                         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-                        Shipping & Billing Addresses
+                        Shipping &amp; Billing Addresses
                         <button class="ml-auto btn btn-primary btn-sm" onclick="openAddressModal()">+ Add New</button>
                     </div>
                     <div id="addresses-alert"></div>
                     <div id="addresses-container">
-                        <div class="text-center py-8 text-gray-400 text-sm">Loading addresses…</div>
+                        <div class="text-center py-8 text-slate-400 text-sm">Loading addresses…</div>
                     </div>
                 </div>
             </div>
 
-            {{-- ══ ACCOUNT SETTINGS ══════════════════════════════ --}}
+            {{-- ══ ACCOUNT SETTINGS ════════════════════════════════ --}}
             <div class="account-section" id="section-settings">
                 <div class="card">
                     <div class="card-title">
@@ -499,20 +528,23 @@
                         Account Settings
                     </div>
 
-                    <div class="p-4 bg-gray-50 rounded-xl border border-gray-200 mb-4">
+                    <div class="p-4 bg-slate-50 rounded-2xl border border-slate-200 mb-4">
                         <div class="flex items-center justify-between">
                             <div>
-                                <div class="font-semibold text-sm text-gray-800">Secure Logout</div>
-                                <div class="text-xs text-gray-500 mt-0.5">Log out and revoke your current session token.</div>
+                                <div class="font-bold text-sm text-navy-950">Secure Logout</div>
+                                <div class="text-xs text-slate-500 mt-0.5">Revoke your current session and sign out securely.</div>
                             </div>
                             <button class="btn btn-outline btn-sm" onclick="handleSecureLogout()">Sign Out</button>
                         </div>
                     </div>
 
-                    <div class="p-4 bg-red-50 rounded-xl border border-red-200">
-                        <div class="font-semibold text-sm text-red-700 mb-1">⚠ Danger Zone</div>
-                        <p class="text-xs text-red-500 mb-3">
-                            Permanently delete your account and all associated data. This action is irreversible.
+                    <div class="p-4 bg-red-50 rounded-2xl border border-red-200">
+                        <div class="flex items-start gap-2 mb-2">
+                            <svg class="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                            <div class="font-bold text-sm text-red-700">Danger Zone</div>
+                        </div>
+                        <p class="text-xs text-red-600 mb-3">
+                            Permanently delete your account and all associated data. This action is <strong>irreversible</strong>.
                         </p>
                         <button class="btn btn-danger btn-sm" onclick="openDeleteModal()">Delete My Account</button>
                     </div>
@@ -523,7 +555,7 @@
     </div>
 </div>
 
-{{-- ── Address Modal ─────────────────────────────────────────── --}}
+{{-- ── Address Modal ────────────────────────────────────────── --}}
 <div class="modal-backdrop" id="address-modal">
     <div class="modal-box" style="max-width:520px;">
         <div class="modal-title" id="addr-modal-title">Add New Address</div>
@@ -545,7 +577,7 @@
                 <input type="text" id="addr-line1" class="form-control" required placeholder="Street, house/apartment number">
             </div>
             <div class="form-group">
-                <label class="form-label" for="addr-line2">Address Line 2 <span class="text-gray-400 normal-case font-normal">(optional)</span></label>
+                <label class="form-label" for="addr-line2">Address Line 2 <span class="text-slate-400 normal-case font-normal">(optional)</span></label>
                 <input type="text" id="addr-line2" class="form-control" placeholder="Floor, suite, etc.">
             </div>
             <div class="form-grid-2">
@@ -570,7 +602,7 @@
             </div>
             <label class="flex items-center gap-2 text-sm mb-4 cursor-pointer">
                 <input type="checkbox" id="addr-default" class="rounded">
-                <span class="text-gray-700 font-medium">Set as default address</span>
+                <span class="text-slate-700 font-semibold">Set as default address</span>
             </label>
             <div class="flex gap-3">
                 <button type="submit" id="save-addr-btn" class="btn btn-primary">Save Address</button>
@@ -580,7 +612,7 @@
     </div>
 </div>
 
-{{-- ── Delete Account Modal ──────────────────────────────────── --}}
+{{-- ── Delete Account Modal ─────────────────────────────────── --}}
 <div class="modal-backdrop" id="delete-modal">
     <div class="modal-box">
         <div class="modal-title" style="color:#ef4444;">🗑 Delete Account</div>
@@ -719,7 +751,7 @@ async function loadOrders(page = 1) {
     ordersPage = page;
     const container   = document.getElementById('orders-container');
     const pagination  = document.getElementById('orders-pagination');
-    container.innerHTML = '<div class="text-center py-8 text-gray-400 text-sm">Loading orders…</div>';
+    container.innerHTML = '<div class="text-center py-8 text-slate-400 text-sm">Loading orders…</div>';
 
     const res = await apiFetch('/api/orders?page=' + page);
     if (!res.ok) {
@@ -735,7 +767,7 @@ async function loadOrders(page = 1) {
             <div class="empty-state">
                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>
                 <h3>No orders yet</h3>
-                <p>Place your first order from our <a href="/products" class="text-indigo-600 underline">product catalog</a>.</p>
+                <p>Place your first order from our <a href="/products" class="text-blue-600 underline">product catalog</a>.</p>
             </div>`;
         pagination.innerHTML = '';
         return;
@@ -786,18 +818,18 @@ function orderCardHtml(order, compact) {
     return `
         <div class="order-card">
             <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
-                <span class="font-bold text-gray-900 text-sm">Order #${order.id}</span>
+                <span class="font-black text-navy-950 text-sm">Order #${order.id}</span>
                 <span class="badge ${badge}">${label}</span>
             </div>
-            <div class="flex flex-wrap items-center justify-between gap-2 text-sm text-gray-600">
+            <div class="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600">
                 <div>
                     <span>${order.items?.length || 0} item(s)</span>
-                    ${order.address ? `<span class="ml-2 text-gray-400">· ${order.address.city}</span>` : ''}
-                    ${expectedDelivery ? `<div class="text-xs text-indigo-600 font-semibold mt-1 flex items-center gap-1">🚚 Expected: ${expectedDelivery}</div>` : ''}
+                    ${order.address ? `<span class="ml-2 text-slate-400">· ${order.address.city}</span>` : ''}
+                    ${expectedDelivery ? `<div class="text-xs text-blue-600 font-semibold mt-1 flex items-center gap-1">🚚 Expected: ${expectedDelivery}</div>` : ''}
                 </div>
                 <div class="text-right">
-                    <span class="font-bold text-gray-900">$${parseFloat(order.total_amount).toFixed(2)}</span>
-                    <span class="block text-xs text-gray-400">${date}</span>
+                    <span class="font-black text-navy-950 text-sm">$${parseFloat(order.total_amount).toFixed(2)}</span>
+                    <span class="block text-slate-400">${date}</span>
                 </div>
             </div>
             <div class="flex gap-2 mt-3">
@@ -825,7 +857,7 @@ async function cancelOrder(orderId) {
 ═══════════════════════════════════════════════════════════════ */
 async function loadWishlist() {
     const el = document.getElementById('wishlist-container');
-    el.innerHTML = '<div class="col-span-full text-center py-8 text-gray-400 text-sm">Loading wishlist…</div>';
+    el.innerHTML = '<div class="col-span-full text-center py-8 text-slate-400 text-sm">Loading wishlist…</div>';
 
     const res = await apiFetch('/api/wishlist');
     if (!res.ok) { el.innerHTML = '<p class="text-sm text-red-500 text-center py-4">Failed to load wishlist.</p>'; return; }
@@ -855,8 +887,8 @@ async function loadWishlist() {
                     <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
                 </button>
                 <div class="wishlist-item-body">
-                    <div class="text-xs font-semibold text-gray-800 truncate">${p?.name || 'Product'}</div>
-                    <div class="text-xs font-bold text-indigo-600 mt-0.5">$${parseFloat(p?.price || 0).toFixed(2)}</div>
+                    <div class="text-xs font-bold text-navy-950 truncate">${p?.name || 'Product'}</div>
+                    <div class="text-xs font-black text-blue-600 mt-0.5">$${parseFloat(p?.price || 0).toFixed(2)}</div>
                     <a href="/products/${p?.id}" class="mt-1.5 btn btn-outline btn-sm" style="width:100%">View</a>
                 </div>
             </div>`;
@@ -881,7 +913,7 @@ async function clearWishlist() {
 ═══════════════════════════════════════════════════════════════ */
 async function loadAddresses() {
     const el = document.getElementById('addresses-container');
-    el.innerHTML = '<div class="text-center py-8 text-gray-400 text-sm">Loading addresses…</div>';
+    el.innerHTML = '<div class="text-center py-8 text-slate-400 text-sm">Loading addresses…</div>';
     const res = await apiFetch('/api/addresses');
     if (!res.ok) { el.innerHTML = '<p class="text-sm text-red-500 text-center py-4">Failed to load addresses.</p>'; return; }
 
@@ -899,12 +931,12 @@ async function loadAddresses() {
         <div class="address-card ${a.is_default ? 'default' : ''}">
             <div>
                 <div class="flex items-center gap-2 mb-1">
-                    <span class="font-semibold text-sm text-gray-900">${a.name}</span>
-                    ${a.is_default ? '<span class="badge" style="background:#e0e7ff;color:#3730a3;">Default</span>' : ''}
+                    <span class="font-bold text-sm text-navy-950">${a.name}</span>
+                    ${a.is_default ? '<span class="badge" style="background:#0a1128;color:#fff;">Default</span>' : ''}
                 </div>
-                <div class="text-sm text-gray-600">${a.address_line1}${a.address_line2 ? ', ' + a.address_line2 : ''}</div>
-                <div class="text-sm text-gray-600">${a.city}, ${a.state} ${a.postal_code}, ${a.country}</div>
-                <div class="text-xs text-gray-400 mt-1">📞 ${a.phone}</div>
+                <div class="text-xs text-slate-600">${a.address_line1}${a.address_line2 ? ', ' + a.address_line2 : ''}</div>
+                <div class="text-xs text-slate-600">${a.city}, ${a.state} ${a.postal_code}, ${a.country}</div>
+                <div class="text-xs text-slate-400 mt-1">📞 ${a.phone}</div>
             </div>
             <div class="address-actions">
                 ${!a.is_default ? `<button class="btn btn-outline btn-sm" onclick="setDefaultAddress(${a.id})">Set Default</button>` : ''}

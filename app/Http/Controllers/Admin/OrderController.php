@@ -3,18 +3,18 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\CouponUsage;
-use App\Models\InventoryLog;
 use App\Models\Order;
-use App\Models\Product;
-use App\Models\ProductVariant;
 use App\Observers\OrderObserver;
+use App\Services\OrderCancellationService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 
 class OrderController extends Controller
 {
     private const STATUSES = ['pending', 'processing', 'out_for_delivery', 'shipped', 'delivered', 'cancelled'];
+
+    public function __construct(
+        protected OrderCancellationService $cancellationService
+    ) {}
 
     public function index(Request $request)
     {
@@ -42,7 +42,7 @@ class OrderController extends Controller
                   });
             });
         }
-        $orders = $query->paginate(20)->withQueryString();
+        $orders   = $query->paginate(20)->withQueryString();
         $statuses = self::STATUSES;
         return view('admin.orders.index', compact('orders', 'statuses'));
     }
@@ -54,79 +54,55 @@ class OrderController extends Controller
         return view('admin.orders.show', compact('order', 'statuses'));
     }
 
+    /**
+     * Update order status.
+     * When transitioning TO 'cancelled', delegates to OrderCancellationService
+     * which handles stock restoration, coupon cleanup, payment status, and
+     * Stripe refund — all idempotently and without duplicating business logic.
+     */
     public function updateStatus(Request $request, Order $order)
     {
         $validated = $request->validate([
-            'status' => 'required|in:' . implode(',', self::STATUSES),
-            'expected_delivery_date' => 'nullable|date',
+            'status'                  => 'required|in:' . implode(',', self::STATUSES),
+            'expected_delivery_date'  => 'nullable|date',
         ]);
 
-        $oldStatus = $order->status;
         $newStatus = $validated['status'];
-        $updateData = ['status' => $newStatus];
 
-        if ($request->has('expected_delivery_date')) {
-            $updateData['expected_delivery_date'] = $validated['expected_delivery_date'] ?: null;
-        }
-
-        DB::transaction(function () use ($order, $updateData, $oldStatus, $newStatus) {
+        // ── Non-cancellation transitions: straightforward status update ──────
+        if ($newStatus !== 'cancelled') {
+            $updateData = ['status' => $newStatus];
+            if ($request->has('expected_delivery_date')) {
+                $updateData['expected_delivery_date'] = $validated['expected_delivery_date'] ?: null;
+            }
             $order->update($updateData);
 
-            if ($newStatus === 'cancelled' && $oldStatus !== 'cancelled') {
-                $order->payments()->where('status', 'pending')->update(['status' => 'cancelled']);
+            return back()->with('success', "Order #{$order->id} status updated to \"{$newStatus}\". Use the Email Controls below to notify the customer.");
+        }
 
-                // Restore coupon usage if order is cancelled
-                CouponUsage::where('order_id', $order->id)->delete();
+        // ── Cancellation transition: delegate to service ─────────────────────
+        // Admin cancellations: issue a Stripe refund for card-paid orders.
+        if ($order->status === 'cancelled') {
+            return back()->with('success', "Order #{$order->id} is already cancelled.");
+        }
 
-                foreach ($order->items as $item) {
-                    $variant = null;
-                    $variantBefore = null;
-                    $variantAfter = null;
+        $result = $this->cancellationService->cancel(
+            order:       $order,
+            actorUserId: auth()->id(),
+            actor:       'admin',
+            issueRefund: true
+        );
 
-                    if ($item->product_variant_id) {
-                        $variant = ProductVariant::where('id', $item->product_variant_id)->lockForUpdate()->first();
-                        if ($variant) {
-                            $variantBefore = (int) $variant->stock;
-                            $variantAfter  = $variantBefore + $item->quantity;
-                            $variant->update(['stock' => $variantAfter]);
+        if ($result->failed()) {
+            return back()->with('error', "Could not cancel Order #{$order->id}: " . $result->errorMessage);
+        }
 
-                            InventoryLog::create([
-                                'product_id'         => $item->product_id,
-                                'product_variant_id' => $variant->id,
-                                'user_id'            => auth()->id(),
-                                'type'               => 'return',
-                                'quantity'           => $item->quantity,
-                                'quantity_before'    => $variantBefore,
-                                'quantity_after'     => $variantAfter,
-                                'reference_id'       => (string) $order->id,
-                                'notes'              => "Stock returned due to order #{$order->id} cancellation by admin ({$item->variant_name})",
-                            ]);
-                        }
-                    } else {
-                        $product = Product::where('id', $item->product_id)->lockForUpdate()->first();
-                        if ($product) {
-                            $before = (int) $product->stock;
-                            $after = $before + $item->quantity;
-                            $product->update(['stock' => $after]);
+        // Apply expected_delivery_date update if provided alongside cancellation
+        if ($request->has('expected_delivery_date')) {
+            $order->update(['expected_delivery_date' => $validated['expected_delivery_date'] ?: null]);
+        }
 
-                            InventoryLog::create([
-                                'product_id'         => $product->id,
-                                'product_variant_id' => null,
-                                'user_id'            => auth()->id(),
-                                'type'               => 'return',
-                                'quantity'           => $item->quantity,
-                                'quantity_before'    => $before,
-                                'quantity_after'     => $after,
-                                'reference_id'       => (string) $order->id,
-                                'notes'              => "Stock returned due to order #{$order->id} cancellation by admin" . ($item->variant_name ? " ({$item->variant_name})" : ''),
-                            ]);
-                        }
-                    }
-                }
-            }
-        });
-
-        return back()->with('success', "Order #{$order->id} status updated to \"{$newStatus}\". Use the Email Controls below to notify the customer.");
+        return back()->with('success', "Order #{$order->id} has been cancelled. " . $result->message());
     }
 
     public function sendApprovalEmail(Order $order)
@@ -153,8 +129,8 @@ class OrderController extends Controller
         $validated = $request->validate([
             'expected_delivery_date' => 'required|date|after_or_equal:today',
         ], [
-            'expected_delivery_date.required' => 'Please enter an expected delivery date.',
-            'expected_delivery_date.after_or_equal' => 'The delivery date must be today or a future date.',
+            'expected_delivery_date.required'        => 'Please enter an expected delivery date.',
+            'expected_delivery_date.after_or_equal'  => 'The delivery date must be today or a future date.',
         ]);
 
         $recipientEmail = $order->recipient_email;

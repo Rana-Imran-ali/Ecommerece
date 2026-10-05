@@ -5,49 +5,56 @@
 
 @push('styles')
 <style>
-    /* Clean, Modern AI Chat Workspace */
+    /* Dark Navy & Crisp White AI Chat Workspace */
     .ai-chat-root {
-        --chat-primary: #4f46e5;
-        --chat-primary-hover: #4338ca;
+        --chat-primary: #1d4ed8;
+        --chat-primary-hover: #1e40af;
+        --chat-navy-dark: #0a1128;
+        --chat-navy-mid: #0f1e4a;
         --chat-bg-soft: #f8fafc;
         --chat-border: #e2e8f0;
-        --chat-text-dark: #0f172a;
+        --chat-text-dark: #0a1128;
         --chat-text-muted: #64748b;
+        background: #f8fafc;
+        padding-top: 1.5rem;
+        padding-bottom: 2rem;
     }
 
     .ai-container {
-        max-width: 1200px;
+        max-width: 1240px;
         margin: 0 auto;
-        height: calc(100vh - 170px);
-        min-height: 580px;
-        max-height: 820px;
+        padding: 0 1rem;
+        height: calc(100vh - 180px);
+        min-height: 600px;
+        max-height: 840px;
         display: grid;
         grid-template-columns: 1fr;
         gap: 1.25rem;
     }
 
-    @media (min-width: 900px) {
+    @media (min-width: 960px) {
         .ai-container {
-            grid-template-columns: 1fr 310px;
+            grid-template-columns: 1fr 330px;
         }
     }
 
     /* Main Chat Window Card */
     .ai-main-card {
         background: #ffffff;
-        border: 1px solid var(--chat-border);
+        border: 1px solid #e2e8f0;
         border-radius: 1.25rem;
-        box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
+        box-shadow: 0 10px 30px -5px rgba(10, 17, 40, 0.06);
         display: flex;
         flex-direction: column;
         overflow: hidden;
+        position: relative;
     }
 
     /* Top Bar */
     .ai-header {
-        padding: 1rem 1.5rem;
+        padding: 1.1rem 1.5rem;
         background: #ffffff;
-        border-bottom: 1px solid var(--chat-border);
+        border-bottom: 1px solid #e2e8f0;
         display: flex;
         align-items: center;
         justify-content: space-between;
@@ -57,21 +64,21 @@
     .ai-bot-info {
         display: flex;
         align-items: center;
-        gap: 0.75rem;
+        gap: 0.85rem;
     }
 
     .ai-bot-avatar {
-        width: 42px;
-        height: 42px;
-        border-radius: 50%;
-        background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+        width: 44px;
+        height: 44px;
+        border-radius: 1rem;
+        background: linear-gradient(135deg, #0a1128 0%, #1e3a8a 100%);
         display: flex;
         align-items: center;
         justify-content: center;
         color: #ffffff;
         position: relative;
         flex-shrink: 0;
-        box-shadow: 0 4px 10px rgba(79, 70, 229, 0.25);
+        box-shadow: 0 6px 14px rgba(10, 17, 40, 0.25);
     }
 
     .ai-bot-avatar svg {
@@ -81,20 +88,21 @@
 
     .ai-online-badge {
         position: absolute;
-        bottom: 1px;
-        right: 1px;
-        width: 11px;
-        height: 11px;
+        bottom: -2px;
+        right: -2px;
+        width: 12px;
+        height: 12px;
         background: #10b981;
         border: 2px solid #ffffff;
         border-radius: 50%;
     }
 
     .ai-bot-title {
-        font-size: 1rem;
-        font-weight: 700;
-        color: var(--chat-text-dark);
+        font-size: 1.05rem;
+        font-weight: 800;
+        color: #0a1128;
         margin: 0;
+        letter-spacing: -0.01em;
         line-height: 1.2;
     }
 
@@ -102,7 +110,7 @@
         font-size: 0.75rem;
         color: #10b981;
         font-weight: 600;
-        margin: 0.15rem 0 0;
+        margin: 0.2rem 0 0;
         display: flex;
         align-items: center;
         gap: 0.35rem;
@@ -110,12 +118,12 @@
 
     .ai-header-btn {
         padding: 0.45rem 0.85rem;
-        border-radius: 0.6rem;
-        border: 1px solid var(--chat-border);
+        border-radius: 0.65rem;
+        border: 1px solid #e2e8f0;
         background: #f8fafc;
-        color: var(--chat-text-muted);
+        color: #475569;
         font-size: 0.8rem;
-        font-weight: 600;
+        font-weight: 700;
         cursor: pointer;
         display: inline-flex;
         align-items: center;
@@ -124,9 +132,9 @@
     }
 
     .ai-header-btn:hover {
-        background: #f1f5f9;
-        color: var(--chat-text-dark);
-        border-color: #cbd5e1;
+        background: #0f1e4a;
+        color: #ffffff;
+        border-color: #0f1e4a;
     }
 
     /* Messages Stream */
@@ -153,7 +161,7 @@
     .ai-row {
         display: flex;
         gap: 0.75rem;
-        max-width: 82%;
+        max-width: 84%;
         animation: chat-fade 0.2s ease-out;
     }
 
@@ -172,24 +180,26 @@
     }
 
     .ai-msg-avatar {
-        width: 32px;
-        height: 32px;
-        border-radius: 50%;
+        width: 34px;
+        height: 34px;
+        border-radius: 0.75rem;
         display: flex;
         align-items: center;
         justify-content: center;
         flex-shrink: 0;
         font-size: 0.75rem;
-        font-weight: 700;
+        font-weight: 800;
         color: #ffffff;
     }
 
     .ai-row.bot .ai-msg-avatar {
-        background: linear-gradient(135deg, #4f46e5, #7c3aed);
+        background: linear-gradient(135deg, #0a1128, #1e3a8a);
+        box-shadow: 0 4px 10px rgba(10, 17, 40, 0.2);
     }
 
     .ai-row.user .ai-msg-avatar {
-        background: linear-gradient(135deg, #3b82f6, #06b6d4);
+        background: linear-gradient(135deg, #1d4ed8, #3b82f6);
+        box-shadow: 0 4px 10px rgba(29, 78, 216, 0.25);
     }
 
     .ai-bubble-box {
@@ -202,8 +212,8 @@
     }
 
     .ai-bubble {
-        padding: 0.85rem 1.15rem;
-        border-radius: 1.15rem;
+        padding: 0.9rem 1.25rem;
+        border-radius: 1.25rem;
         font-size: 0.92rem;
         line-height: 1.6;
         word-break: break-word;
@@ -211,10 +221,10 @@
 
     .ai-row.bot .ai-bubble {
         background: #ffffff;
-        color: #1e293b;
+        color: #0f172a;
         border: 1px solid #e2e8f0;
-        border-top-left-radius: 0.25rem;
-        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+        border-top-left-radius: 0.35rem;
+        box-shadow: 0 2px 6px rgba(10, 17, 40, 0.03);
     }
 
     .ai-row.bot .ai-bubble p {
@@ -236,16 +246,16 @@
     }
 
     .ai-row.bot .ai-bubble a {
-        color: #4f46e5;
-        font-weight: 600;
+        color: #1d4ed8;
+        font-weight: 700;
         text-decoration: underline;
     }
 
     .ai-row.user .ai-bubble {
-        background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
+        background: linear-gradient(135deg, #0a1128 0%, #1e3a8a 100%);
         color: #ffffff;
-        border-top-right-radius: 0.25rem;
-        box-shadow: 0 4px 12px rgba(79, 70, 229, 0.2);
+        border-top-right-radius: 0.35rem;
+        box-shadow: 0 6px 16px rgba(10, 17, 40, 0.22);
     }
 
     .ai-time {
@@ -253,12 +263,13 @@
         color: #94a3b8;
         margin-top: 0.35rem;
         padding: 0 0.25rem;
+        font-weight: 500;
     }
 
     /* Product Cards in Chat */
     .ai-product-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
         gap: 0.75rem;
         margin-top: 0.85rem;
         width: 100%;
@@ -267,32 +278,32 @@
     .ai-prod-card {
         background: #ffffff;
         border: 1px solid #e2e8f0;
-        border-radius: 0.75rem;
+        border-radius: 0.85rem;
         padding: 0.65rem;
         display: flex;
         flex-direction: column;
         gap: 0.35rem;
-        transition: transform 0.15s, box-shadow 0.15s;
+        transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
     }
 
     .ai-prod-card:hover {
         transform: translateY(-2px);
-        box-shadow: 0 6px 14px rgba(0,0,0,0.06);
-        border-color: #cbd5e1;
+        box-shadow: 0 8px 18px rgba(10, 17, 40, 0.08);
+        border-color: #93c5fd;
     }
 
     .ai-prod-img {
         width: 100%;
-        height: 100px;
+        height: 105px;
         object-fit: cover;
-        border-radius: 0.5rem;
+        border-radius: 0.55rem;
         background: #f1f5f9;
     }
 
     .ai-prod-title {
         font-size: 0.8rem;
-        font-weight: 600;
-        color: #1e293b;
+        font-weight: 700;
+        color: #0a1128;
         margin: 0;
         line-height: 1.3;
         display: -webkit-box;
@@ -302,27 +313,27 @@
     }
 
     .ai-prod-price {
-        font-size: 0.85rem;
-        font-weight: 700;
-        color: #4f46e5;
+        font-size: 0.88rem;
+        font-weight: 800;
+        color: #1d4ed8;
     }
 
     .ai-prod-btn {
         display: block;
         text-align: center;
-        padding: 0.35rem 0.5rem;
+        padding: 0.4rem 0.5rem;
         background: #f1f5f9;
-        color: #334155;
-        border-radius: 0.45rem;
+        color: #0a1128;
+        border-radius: 0.5rem;
         font-size: 0.72rem;
-        font-weight: 600;
+        font-weight: 700;
         text-decoration: none !important;
         transition: background 0.15s, color 0.15s;
         margin-top: auto;
     }
 
     .ai-prod-btn:hover {
-        background: #4f46e5;
+        background: #0f1e4a;
         color: #ffffff;
     }
 
@@ -343,16 +354,17 @@
         background: #ffffff;
         border: 1px solid #e2e8f0;
         border-radius: 1.15rem;
-        border-top-left-radius: 0.25rem;
+        border-top-left-radius: 0.35rem;
         display: flex;
         align-items: center;
         gap: 5px;
+        box-shadow: 0 2px 6px rgba(10, 17, 40, 0.03);
     }
 
     .ai-dot {
         width: 6px;
         height: 6px;
-        background: #818cf8;
+        background: #60a5fa;
         border-radius: 50%;
         animation: typing-jump 1.2s infinite ease-in-out;
     }
@@ -369,7 +381,7 @@
     .ai-input-bar {
         padding: 0.85rem 1.25rem;
         background: #ffffff;
-        border-top: 1px solid var(--chat-border);
+        border-top: 1px solid #e2e8f0;
     }
 
     .ai-input-wrap {
@@ -380,13 +392,13 @@
         border: 1.5px solid #e2e8f0;
         border-radius: 1rem;
         padding: 0.5rem 0.75rem 0.5rem 1rem;
-        transition: border-color 0.15s, box-shadow 0.15s;
+        transition: border-color 0.15s, box-shadow 0.15s, background-color 0.15s;
     }
 
     .ai-input-wrap:focus-within {
-        border-color: #4f46e5;
+        border-color: #1d4ed8;
         background: #ffffff;
-        box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12);
+        box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.12);
     }
 
     .ai-textarea {
@@ -398,7 +410,7 @@
         line-height: 1.45;
         resize: none;
         max-height: 100px;
-        color: var(--chat-text-dark);
+        color: #0a1128;
         font-family: inherit;
         padding: 0.25rem 0;
     }
@@ -411,7 +423,7 @@
         width: 38px;
         height: 38px;
         border-radius: 0.75rem;
-        background: #4f46e5;
+        background: #0a1128;
         border: none;
         color: #ffffff;
         display: flex;
@@ -423,7 +435,7 @@
     }
 
     .ai-send-btn:hover:not(:disabled) {
-        background: #4338ca;
+        background: #1d4ed8;
         transform: translateY(-1px);
     }
 
@@ -441,7 +453,7 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
-        margin-top: 0.4rem;
+        margin-top: 0.45rem;
         font-size: 0.72rem;
         color: #94a3b8;
         padding: 0 0.25rem;
@@ -450,17 +462,17 @@
     /* RIGHT COLUMN: Chat History Panel */
     .ai-history-card {
         background: #ffffff;
-        border: 1px solid var(--chat-border);
+        border: 1px solid #e2e8f0;
         border-radius: 1.25rem;
-        box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
+        box-shadow: 0 10px 30px -5px rgba(10, 17, 40, 0.06);
         display: flex;
         flex-direction: column;
         overflow: hidden;
     }
 
     .ai-history-header {
-        padding: 1rem 1.15rem;
-        border-bottom: 1px solid var(--chat-border);
+        padding: 1.1rem 1.25rem;
+        border-bottom: 1px solid #e2e8f0;
         background: #ffffff;
         display: flex;
         align-items: center;
@@ -471,34 +483,35 @@
         display: flex;
         align-items: center;
         gap: 0.5rem;
-        font-size: 0.92rem;
-        font-weight: 700;
-        color: var(--chat-text-dark);
+        font-size: 0.95rem;
+        font-weight: 800;
+        color: #0a1128;
     }
 
     .ai-history-title svg {
-        width: 17px;
-        height: 17px;
-        color: #4f46e5;
+        width: 18px;
+        height: 18px;
+        color: #1d4ed8;
     }
 
     .ai-new-btn {
         display: inline-flex;
         align-items: center;
         gap: 0.35rem;
-        background: #4f46e5;
+        background: #0a1128;
         color: #ffffff;
         border: none;
-        padding: 0.4rem 0.75rem;
-        border-radius: 0.55rem;
+        padding: 0.45rem 0.85rem;
+        border-radius: 0.65rem;
         font-size: 0.76rem;
-        font-weight: 600;
+        font-weight: 700;
         cursor: pointer;
-        transition: background 0.15s;
+        transition: background 0.15s, transform 0.15s;
     }
 
     .ai-new-btn:hover {
-        background: #4338ca;
+        background: #1d4ed8;
+        transform: translateY(-1px);
     }
 
     .ai-new-btn svg {
@@ -530,7 +543,7 @@
         align-items: center;
         gap: 0.65rem;
         padding: 0.65rem 0.75rem;
-        border-radius: 0.75rem;
+        border-radius: 0.85rem;
         border: 1px solid transparent;
         background: #ffffff;
         cursor: pointer;
@@ -544,14 +557,14 @@
     }
 
     .ai-history-item.active {
-        background: #eef2ff;
-        border-color: rgba(79, 70, 229, 0.3);
+        background: #eff6ff;
+        border-color: #bfdbfe;
     }
 
     .ai-item-icon {
-        width: 28px;
-        height: 28px;
-        border-radius: 0.45rem;
+        width: 30px;
+        height: 30px;
+        border-radius: 0.55rem;
         background: #f1f5f9;
         display: flex;
         align-items: center;
@@ -561,7 +574,7 @@
     }
 
     .ai-history-item.active .ai-item-icon {
-        background: #4f46e5;
+        background: #0a1128;
         color: #ffffff;
     }
 
@@ -577,8 +590,8 @@
 
     .ai-item-title {
         font-size: 0.8rem;
-        font-weight: 600;
-        color: #1e293b;
+        font-weight: 700;
+        color: #0a1128;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -586,8 +599,8 @@
     }
 
     .ai-history-item.active .ai-item-title {
-        color: #3730a3;
-        font-weight: 700;
+        color: #1d4ed8;
+        font-weight: 800;
     }
 
     .ai-item-meta {
@@ -655,7 +668,7 @@
     /* History Footer */
     .ai-history-footer {
         padding: 0.75rem 1rem;
-        border-top: 1px solid var(--chat-border);
+        border-top: 1px solid #e2e8f0;
         background: #ffffff;
         display: flex;
         align-items: center;
@@ -665,7 +678,7 @@
     .ai-total-count {
         font-size: 0.72rem;
         color: #64748b;
-        font-weight: 500;
+        font-weight: 600;
     }
 
     .ai-clear-btn {
@@ -673,13 +686,13 @@
         background: transparent;
         color: #ef4444;
         font-size: 0.72rem;
-        font-weight: 600;
+        font-weight: 700;
         cursor: pointer;
         display: inline-flex;
         align-items: center;
         gap: 0.25rem;
-        padding: 0.2rem 0.35rem;
-        border-radius: 0.35rem;
+        padding: 0.2rem 0.4rem;
+        border-radius: 0.4rem;
         transition: background 0.15s;
     }
 
@@ -708,7 +721,7 @@
                     <div>
                         <h1 class="ai-bot-title">AI Shopping Concierge</h1>
                         <p class="ai-bot-subtitle">
-                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block"></span>
+                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-pulse"></span>
                             Online • Instant product assistance
                         </p>
                     </div>
@@ -730,7 +743,7 @@
             <!-- Typing indicator -->
             <div class="ai-stream px-6 py-2" style="flex:0; padding-top:0;" id="ai-typing-container">
                 <div class="ai-typing-row" id="ai-typing">
-                    <div class="ai-msg-avatar" style="background: linear-gradient(135deg, #4f46e5, #7c3aed);">
+                    <div class="ai-msg-avatar" style="background: linear-gradient(135deg, #0a1128, #1e3a8a);">
                         <svg class="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
                         </svg>
@@ -743,7 +756,7 @@
                 </div>
             </div>
 
-            <!-- Input area (Clean, prompt chips removed) -->
+            <!-- Input area -->
             <div class="ai-input-bar">
                 <form id="ai-chat-form" onsubmit="return false;">
                     <div class="ai-input-wrap">
@@ -761,9 +774,9 @@
                         </button>
                     </div>
                     <div class="ai-input-hint">
-                        <span>Press <kbd class="px-1 py-0.5 bg-gray-100 border border-gray-200 rounded text-gray-500 font-mono text-[10px]">Enter</kbd> to send, <kbd class="px-1 py-0.5 bg-gray-100 border border-gray-200 rounded text-gray-500 font-mono text-[10px]">Shift+Enter</kbd> for new line</span>
-                        <span class="flex items-center gap-1">
-                            <svg class="w-3 h-3 text-indigo-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clip-rule="evenodd"/></svg>
+                        <span>Press <kbd class="px-1.5 py-0.5 bg-slate-100 border border-slate-200 rounded text-slate-600 font-mono text-[10px]">Enter</kbd> to send, <kbd class="px-1.5 py-0.5 bg-slate-100 border border-slate-200 rounded text-slate-600 font-mono text-[10px]">Shift+Enter</kbd> for new line</span>
+                        <span class="flex items-center gap-1 font-semibold text-blue-700">
+                            <svg class="w-3.5 h-3.5 text-blue-600" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clip-rule="evenodd"/></svg>
                             Gemini AI
                         </span>
                     </div>

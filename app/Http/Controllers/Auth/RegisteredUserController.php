@@ -46,9 +46,6 @@ class RegisteredUserController extends Controller
 
         Auth::login($user);
 
-        $token = $user->createToken('web-session')->plainTextToken;
-        $request->session()->put('api_token', $token);
-
         return redirect(route('dashboard', absolute: false));
     }
 }

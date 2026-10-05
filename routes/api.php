@@ -52,8 +52,13 @@ Route::prefix('coupons')->group(function () {
 
 // WhatsApp Webhook (Public)
 Route::prefix('whatsapp')->group(function () {
-    Route::get('/webhook', [WhatsAppWebhookController::class, 'verify'])->name('api.whatsapp.verify');
-    Route::post('/webhook', [WhatsAppWebhookController::class, 'handleWebhook'])->name('api.whatsapp.webhook');
+    // GET: Meta challenge-response handshake (no body, no signature)
+    Route::get('/webhook',  [WhatsAppWebhookController::class, 'verify'])->name('api.whatsapp.verify');
+
+    // POST: Incoming events — must carry a valid X-Hub-Signature-256 header
+    Route::post('/webhook', [WhatsAppWebhookController::class, 'handleWebhook'])
+        ->middleware('whatsapp.signature')
+        ->name('api.whatsapp.webhook');
 });
 
 /*
