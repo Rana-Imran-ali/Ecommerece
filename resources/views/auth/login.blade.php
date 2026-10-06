@@ -10,6 +10,9 @@
 
     <form method="POST" action="{{ route('login') }}" class="space-y-5">
         @csrf
+        @if(request('redirect'))
+            <input type="hidden" name="redirect" value="{{ request('redirect') }}">
+        @endif
 
         <!-- Email Address -->
         <div>

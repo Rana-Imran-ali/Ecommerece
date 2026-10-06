@@ -251,7 +251,7 @@
     }
 
     async function quickAddToCart(productId) {
-        if (!getAuthToken()) {
+        if (!isUserAuthenticated()) {
             showAlert('search-alert', 'Please log in to add items to your shopping cart.', 'warning');
             setTimeout(() => { window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname + window.location.search); }, 1000);
             return;

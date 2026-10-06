@@ -86,10 +86,10 @@ class OrderCancellationService
                     ->update(['status' => 'refunded']);
             }
 
-            // Mark non-card payments (COD / bank_transfer) as cancelled
+            // Mark non-card payments (COD / bank_transfer) as cancelled (preserve failed / refunded)
             $order->payments()
                 ->where('payment_method', '!=', 'card')
-                ->whereNotIn('status', ['cancelled'])
+                ->whereNotIn('status', ['cancelled', 'failed', 'refunded'])
                 ->update(['status' => 'cancelled']);
 
             // 4c. Restore coupon usage (delete the usage record to free the coupon)
@@ -180,6 +180,10 @@ class OrderCancellationService
                 $before = (int) $variant->stock;
                 $after  = $before + $item->quantity;
                 $variant->update(['stock' => $after]);
+
+                // Synchronize parent product stock
+                $product = Product::where('id', $item->product_id)->first();
+                $product?->syncStockFromVariants();
 
                 InventoryLog::create([
                     'product_id'         => $item->product_id,

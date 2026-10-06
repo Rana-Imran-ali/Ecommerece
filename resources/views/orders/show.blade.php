@@ -32,7 +32,7 @@
     const orderId = {{ $orderId }};
 
     async function loadOrder() {
-        if (!getAuthToken()) {
+        if (!isUserAuthenticated()) {
             window.location.href = '/login?redirect=/orders/' + orderId;
             return;
         }

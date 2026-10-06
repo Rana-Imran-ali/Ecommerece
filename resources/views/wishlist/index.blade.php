@@ -32,7 +32,7 @@
 @push('scripts')
 <script>
     async function loadWishlist() {
-        if (!getAuthToken()) {
+        if (!isUserAuthenticated()) {
             document.getElementById('wishlist-container').innerHTML = `
                 <div class="col-span-full p-12 text-center bg-white rounded-3xl border border-slate-200 space-y-4 shadow-sm">
                     <div class="w-12 h-12 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center mx-auto">

@@ -137,7 +137,7 @@
     let addressList = [];
 
     async function loadAddresses() {
-        if (!getAuthToken()) {
+        if (!isUserAuthenticated()) {
             document.getElementById('addresses-container').innerHTML = `
                 <div class="col-span-full p-16 text-center bg-white rounded-3xl border border-slate-200/80 space-y-4 shadow-sm">
                     <div class="w-16 h-16 mx-auto rounded-2xl bg-navy-50 flex items-center justify-center text-navy-800">

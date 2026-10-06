@@ -157,6 +157,10 @@ class ProductController extends Controller
 
         $product->load(['category', 'images', 'options.values', 'variants.optionValues.option']);
 
+        $effectiveStock = $product->variants->isNotEmpty()
+            ? (int) $product->variants->where('status', 'active')->sum('stock')
+            : (int) $product->stock;
+
         return response()->json([
             'success' => true,
             'data' => [
@@ -166,8 +170,8 @@ class ProductController extends Controller
                 'name' => $product->name,
                 'description' => $product->description,
                 'price' => (float) $product->price,
-                'stock' => (int) $product->stock,
-                'in_stock' => $product->stock > 0,
+                'stock' => $effectiveStock,
+                'in_stock' => $effectiveStock > 0,
                 'options' => $product->options->map(function ($opt) {
                     return [
                         'id' => $opt->id,

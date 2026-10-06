@@ -33,7 +33,7 @@
 @push('scripts')
 <script>
     async function loadCart() {
-        if (!getAuthToken()) {
+        if (!isUserAuthenticated()) {
             document.getElementById('cart-wrapper').innerHTML = `
                 <div class="col-span-full p-12 text-center bg-white rounded-3xl border border-slate-200 space-y-4 shadow-sm">
                     <div class="w-12 h-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mx-auto">

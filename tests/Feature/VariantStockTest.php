@@ -54,7 +54,7 @@ class VariantStockTest extends TestCase
     // =========================================================================
 
     /** @test */
-    public function placing_variant_order_deducts_only_variant_stock_not_parent_stock(): void
+    public function placing_variant_order_deducts_variant_stock_and_synchronizes_parent_stock(): void
     {
         // Set up a Size option + "M" variant with 10 units
         $option = ProductOption::create(['product_id' => $this->product->id, 'name' => 'Size']);
@@ -67,6 +67,9 @@ class VariantStockTest extends TestCase
             'status'     => 'active',
         ]);
         $variant->optionValues()->sync([$optVal->id]);
+
+        // Parent stock was automatically synchronized to variant stock (10)
+        $this->assertEquals(10, $this->product->fresh()->stock);
 
         // Customer adds 3 × "M" variant to cart
         $address = \App\Models\Address::create([
@@ -103,15 +106,15 @@ class VariantStockTest extends TestCase
             'stock' => 7,
         ]);
 
-        // Parent product stock must stay at 100 — untouched
+        // Parent product stock must synchronize to match actual available variant stock (7)
         $this->assertDatabaseHas('products', [
             'id'    => $this->product->id,
-            'stock' => 100,
+            'stock' => 7,
         ]);
     }
 
     /** @test */
-    public function cancelling_variant_order_restores_only_variant_stock_not_parent_stock(): void
+    public function cancelling_variant_order_restores_variant_stock_and_synchronizes_parent_stock(): void
     {
         $option = ProductOption::create(['product_id' => $this->product->id, 'name' => 'Size']);
         $optVal = ProductOptionValue::create(['product_option_id' => $option->id, 'value' => 'L']);
@@ -143,20 +146,62 @@ class VariantStockTest extends TestCase
             'quantity'           => 2,
         ]);
 
-        // Place order (variant stock 5 → 3, parent stays 100)
+        // Place order (variant stock 5 → 3, parent synchronizes 5 → 3)
         $this->withHeaders(['Authorization' => "Bearer {$this->customerToken}"])
             ->postJson('/api/orders', ['payment_method' => 'cod', 'address_id' => $address->id])
             ->assertStatus(201);
 
+        $this->assertDatabaseHas('product_variants', ['id' => $variant->id, 'stock' => 3]);
+        $this->assertDatabaseHas('products', ['id' => $this->product->id, 'stock' => 3]);
+
         $order = Order::where('user_id', $this->customer->id)->latest()->first();
 
-        // Cancel order — should restore variant stock 3 → 5, parent remains 100
+        // Cancel order — should restore variant stock 3 → 5, parent synchronizes 3 → 5
         $this->withHeaders(['Authorization' => "Bearer {$this->customerToken}"])
             ->patchJson("/api/orders/{$order->id}/cancel")
             ->assertStatus(200)->assertJsonPath('success', true);
 
         $this->assertDatabaseHas('product_variants', ['id' => $variant->id, 'stock' => 5]);
-        $this->assertDatabaseHas('products', ['id' => $this->product->id, 'stock' => 100]);
+        $this->assertDatabaseHas('products', ['id' => $this->product->id, 'stock' => 5]);
+    }
+
+    /** @test */
+    public function catalog_displays_actual_available_variant_stock(): void
+    {
+        $option = ProductOption::create(['product_id' => $this->product->id, 'name' => 'Size']);
+        $optS = ProductOptionValue::create(['product_option_id' => $option->id, 'value' => 'S']);
+        $optM = ProductOptionValue::create(['product_option_id' => $option->id, 'value' => 'M']);
+
+        $varS = ProductVariant::create([
+            'product_id' => $this->product->id,
+            'sku'        => 'TSHIRT-S-CAT',
+            'price'      => 25.00,
+            'stock'      => 4,
+            'status'     => 'active',
+        ]);
+        $varS->optionValues()->sync([$optS->id]);
+
+        $varM = ProductVariant::create([
+            'product_id' => $this->product->id,
+            'sku'        => 'TSHIRT-M-CAT',
+            'price'      => 25.00,
+            'stock'      => 6,
+            'status'     => 'active',
+        ]);
+        $varM->optionValues()->sync([$optM->id]);
+
+        // Total available variant stock is 4 + 6 = 10
+        $response = $this->getJson("/api/products/{$this->product->id}");
+        $response->assertStatus(200)
+            ->assertJsonPath('data.stock', 10)
+            ->assertJsonPath('data.in_stock', true);
+
+        // Also listing in catalog shows actual available variant stock
+        $listResponse = $this->getJson('/api/products?search=' . urlencode($this->product->name));
+        $listResponse->assertStatus(200);
+        $item = collect($listResponse->json('data'))->firstWhere('id', $this->product->id);
+        $this->assertNotNull($item);
+        $this->assertEquals(10, $item['stock']);
     }
 
     /** @test */

@@ -98,8 +98,10 @@ class ProductController extends Controller
         $oldStock = $product->stock;
         $product->update($validated);
 
-        // Log stock adjustment if stock changed
-        if ($oldStock !== (int) $validated['stock']) {
+        if ($product->hasVariants()) {
+            $product->syncStockFromVariants();
+        } elseif ($oldStock !== (int) $validated['stock']) {
+            // Log stock adjustment if stock changed on simple product
             $diff = (int) $validated['stock'] - $oldStock;
             InventoryLog::create([
                 'product_id'      => $product->id,

@@ -448,7 +448,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 </svg>
             </div>`;
 
-        if (typeof getAuthToken === 'function' && !getAuthToken()) {
+        const isAuth = typeof isUserAuthenticated === 'function' ? isUserAuthenticated() : (typeof getAuthToken === 'function' && !!getAuthToken());
+        if (!isAuth) {
             itemsContainer.innerHTML = '';
             if (emptyState) { emptyState.classList.remove('hidden'); itemsContainer.appendChild(emptyState); }
             if (countEl) countEl.textContent = '0 items';

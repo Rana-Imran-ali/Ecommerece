@@ -115,6 +115,9 @@ class PaymentController extends Controller
                 return back()->with('success', "Payment #{$payment->id} marked as refunded (no linked order found).");
             }
 
+            // Mark the payment record as refunded
+            $payment->update(['status' => 'refunded']);
+
             // Delegate to service: handles Stripe call + idempotency + stock restore
             $result = $this->cancellationService->cancel(
                 order:       $order,

@@ -192,8 +192,8 @@ class StockConcurrencyTest extends TestCase
 
         $res1->assertStatus(201);
         $this->assertEquals(0, $variant->fresh()->stock);
-        // Parent product stock must not be touched
-        $this->assertEquals(10, $product->fresh()->stock);
+        // Parent product stock synchronizes with variant stock
+        $this->assertEquals(0, $product->fresh()->stock);
 
         // User 2 attempts to checkout the same variant
         $res2 = $this->withHeaders(['Authorization' => "Bearer {$this->token2}"])
@@ -206,7 +206,7 @@ class StockConcurrencyTest extends TestCase
             ->assertJsonPath('success', false);
 
         $this->assertEquals(0, $variant->fresh()->stock);
-        $this->assertEquals(10, $product->fresh()->stock);
+        $this->assertEquals(0, $product->fresh()->stock);
     }
 
     /** @test */
@@ -251,7 +251,7 @@ class StockConcurrencyTest extends TestCase
             'quantity'           => 2,
         ]);
 
-        // Place order: variant stock drops 5 -> 3, product stock stays 50
+        // Place order: variant stock drops 5 -> 3, product stock synchronizes 5 -> 3
         $this->withHeaders(['Authorization' => "Bearer {$this->token1}"])
             ->postJson('/api/orders', [
                 'payment_method' => 'cod',
@@ -259,7 +259,7 @@ class StockConcurrencyTest extends TestCase
             ]);
 
         $this->assertEquals(3, $variant->fresh()->stock);
-        $this->assertEquals(50, $product->fresh()->stock);
+        $this->assertEquals(3, $product->fresh()->stock);
 
         $order = Order::latest('id')->first();
 
@@ -271,7 +271,7 @@ class StockConcurrencyTest extends TestCase
 
         // Variant stock restored 3 -> 5
         $this->assertEquals(5, $variant->fresh()->stock);
-        // Parent product stock must remain 50 (NOT 52)
-        $this->assertEquals(50, $product->fresh()->stock);
+        // Parent product stock synchronizes 3 -> 5
+        $this->assertEquals(5, $product->fresh()->stock);
     }
 }

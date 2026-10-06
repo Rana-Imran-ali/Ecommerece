@@ -87,7 +87,7 @@
 @push('scripts')
 <script>
     async function loadProfile() {
-        if (!getAuthToken()) {
+        if (!isUserAuthenticated()) {
             window.location.href = '/login?redirect=/profile';
             return;
         }

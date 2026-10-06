@@ -27,6 +27,25 @@ class ProductVariant extends Model
     ];
 
     /**
+     * The "booted" method of the model.
+     * Keeps parent product stock automatically synchronized with active variants.
+     */
+    protected static function booted(): void
+    {
+        static::saved(function (ProductVariant $variant) {
+            Product::where('id', $variant->product_id)->first()?->syncStockFromVariants();
+        });
+
+        static::deleted(function (ProductVariant $variant) {
+            Product::where('id', $variant->product_id)->first()?->syncStockFromVariants();
+        });
+
+        static::restored(function (ProductVariant $variant) {
+            Product::where('id', $variant->product_id)->first()?->syncStockFromVariants();
+        });
+    }
+
+    /**
      * Get the parent product.
      */
     public function product(): BelongsTo

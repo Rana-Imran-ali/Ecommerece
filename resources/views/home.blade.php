@@ -381,7 +381,7 @@
 
     // 4. Cart and Wishlist actions for Home page
     async function addToCartHome(productId) {
-        if (!getAuthToken()) {
+        if (!isUserAuthenticated()) {
             showAlert('home-alert', 'Please sign in to add items to your cart.', 'warning');
             setTimeout(() => { window.location.href = '/login?redirect=/'; }, 1000);
             return;
@@ -421,7 +421,7 @@
     }
 
     async function addToWishlistHome(productId) {
-        if (!getAuthToken()) {
+        if (!isUserAuthenticated()) {
             showAlert('home-alert', 'Please sign in to save items to your wishlist.', 'warning');
             setTimeout(() => { window.location.href = '/login?redirect=/'; }, 1000);
             return;

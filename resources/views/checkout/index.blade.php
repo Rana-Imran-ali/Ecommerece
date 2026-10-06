@@ -52,7 +52,7 @@
 
     // ── Page init ──────────────────────────────────────────────────────────
     async function initCheckout() {
-        if (!getAuthToken()) {
+        if (!isUserAuthenticated()) {
             window.location.href = '/login?redirect=/checkout';
             return;
         }

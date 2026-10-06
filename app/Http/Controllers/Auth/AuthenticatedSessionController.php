@@ -30,6 +30,13 @@ class AuthenticatedSessionController extends Controller
 
         $user = $request->user();
 
+        if ($request->filled('redirect')) {
+            $redirectUrl = (string) $request->input('redirect');
+            if (str_starts_with($redirectUrl, '/') && !str_starts_with($redirectUrl, '//')) {
+                return redirect()->to($redirectUrl);
+            }
+        }
+
         if ($user->isAdmin()) {
             return redirect()->intended(route('admin.dashboard', absolute: false));
         }

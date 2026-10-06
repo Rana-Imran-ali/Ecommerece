@@ -489,6 +489,9 @@ class OrderController extends Controller
                                 throw new \RuntimeException("Insufficient stock for '{$cartItem->product->name} ({$variantName})'.");
                             }
 
+                            // Synchronize parent product stock with updated variant stock
+                            $product?->syncStockFromVariants();
+
                             $beforeStock = $variantBeforeStock;
                             $afterStock  = $variantAfterStock;
                         } else {

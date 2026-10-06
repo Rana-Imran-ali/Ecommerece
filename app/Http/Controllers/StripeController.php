@@ -494,7 +494,8 @@ class StripeController extends Controller
             $customerEmail,
             $couponCode,
             $paymentIntentId,
-            (int) $intent->amount
+            // amount may be absent when the intent is already captured via checkout.session
+            (int) ($intent->amount ?? 0)
         );
 
         if ($order) {

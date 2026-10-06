@@ -346,7 +346,7 @@
     }, 350);
 
     async function addToCart(productId) {
-        if (!getAuthToken()) {
+        if (!isUserAuthenticated()) {
             showAlert('product-alert', 'Please login to add products to your cart.', 'warning');
             setTimeout(() => window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname), 1200);
             return;
@@ -385,7 +385,7 @@
     }
 
     async function addToWishlist(productId) {
-        if (!getAuthToken()) {
+        if (!isUserAuthenticated()) {
             showAlert('product-alert', 'Please login to add products to your wishlist.', 'warning');
             setTimeout(() => window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname), 1200);
             return;

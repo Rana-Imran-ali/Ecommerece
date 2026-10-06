@@ -127,6 +127,35 @@ class Product extends Model
     }
 
     /**
+     * Check if product has any active variants.
+     */
+    public function hasVariants(): bool
+    {
+        return $this->variants()->where('status', 'active')->exists();
+    }
+
+    /**
+     * Synchronize parent stock from active variants.
+     * When variants exist, product_variants.stock is the source of truth,
+     * and products.stock represents the total available inventory across active variants.
+     */
+    public function syncStockFromVariants(): int
+    {
+        if ($this->variants()->exists()) {
+            $totalStock = (int) $this->variants()
+                ->where('status', 'active')
+                ->whereNull('deleted_at')
+                ->sum('stock');
+
+            $this->updateQuietly(['stock' => $totalStock]);
+            $this->setAttribute('stock', $totalStock);
+            return $totalStock;
+        }
+
+        return (int) $this->stock;
+    }
+
+    /**
      * Get all order items containing this product.
      */
     public function orderItems(): \Illuminate\Database\Eloquent\Relations\HasMany

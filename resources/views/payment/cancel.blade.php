@@ -28,9 +28,9 @@
             <div class="p-4 bg-amber-50/80 border border-amber-200/80 rounded-2xl text-xs text-amber-900 space-y-1">
                 <p class="font-bold flex items-center gap-1.5">
                     <svg class="w-4 h-4 text-amber-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                    Your cart items are completely safe!
+                    Your items are safely saved in your shopping cart
                 </p>
-                <p class="text-amber-800">Your products are still in your shopping cart. You can retry checkout anytime with any preferred payment method.</p>
+                <p class="text-amber-800">You can retry checkout anytime — no charges were made to your account or payment card.</p>
                 @if($orderId)
                 <p class="text-[11px] text-amber-700 font-mono pt-1">Reference ID: #{{ $orderId }}</p>
                 @endif

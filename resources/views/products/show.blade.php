@@ -430,7 +430,7 @@
     }
 
     function toggleReviewForm(show = null) {
-        if (!getAuthToken()) {
+        if (!isUserAuthenticated()) {
             showAlert('details-alert', 'Please login to submit a product review.', 'warning');
             setTimeout(() => window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname), 1000);
             return;
@@ -497,7 +497,7 @@
     }
 
     async function handleAddWithQuantity(productId, maxStock) {
-        if (!getAuthToken()) {
+        if (!isUserAuthenticated()) {
             showAlert('details-alert', 'Please login to add items to your cart.', 'warning');
             setTimeout(() => window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname), 1200);
             return;
@@ -552,7 +552,7 @@
     }
 
     async function addToWishlist(productId) {
-        if (!getAuthToken()) {
+        if (!isUserAuthenticated()) {
             showAlert('details-alert', 'Please login to add items to your wishlist.', 'warning');
             setTimeout(() => window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname), 1200);
             return;

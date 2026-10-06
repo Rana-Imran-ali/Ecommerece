@@ -41,7 +41,7 @@
 @push('scripts')
 <script>
     async function loadOrders() {
-        if (!getAuthToken()) {
+        if (!isUserAuthenticated()) {
             window.location.href = '/login?redirect=/orders';
             return;
         }
