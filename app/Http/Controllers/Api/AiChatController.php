@@ -44,6 +44,20 @@ class AiChatController extends Controller
             ], 500);
         }
 
+        // Gemini API keys always start with 'AIzaSy'. Detect mis-pasted keys early
+        // so developers get a clear error instead of opaque 400s from the API.
+        if (!str_starts_with($apiKey, 'AIzaSy')) {
+            Log::error('Gemini API key appears malformed. Keys must start with "AIzaSy". Check GEMINI_API_KEY in .env.');
+            return response()->json([
+                'success' => false,
+                'message' => 'AI service is misconfigured. Please contact the site administrator.',
+                'debug'   => app()->hasDebugModeEnabled()
+                    ? 'GEMINI_API_KEY in .env appears malformed. Valid Gemini keys start with "AIzaSy".'
+                    : null,
+            ], 500);
+        }
+
+
         // Fast Greeting Interceptor: Instant response for standard greetings
         $cleanMsg = strtolower(trim($userMessage, " \t\n\r\0\x0B.!?,"));
         $standardGreetings = ['hello', 'hi', 'hey', 'salam', 'good morning', 'good afternoon', 'good evening', 'start', 'welcome'];

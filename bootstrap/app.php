@@ -25,5 +25,19 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        //
+        $exceptions->render(function (\Symfony\Component\HttpKernel\Exception\HttpException $e, \Illuminate\Http\Request $request) {
+            if ($e->getStatusCode() === 419) {
+                if ($request->expectsJson() || $request->is('api/*')) {
+                    return response()->json([
+                        'message' => 'Your session has expired. Please refresh the page and try again.',
+                    ], 419);
+                }
+
+                $target = $request->is('login') ? route('login') : url()->previous(route('login'));
+
+                return redirect()->to($target)
+                    ->withInput($request->except(['password', 'password_confirmation', '_token']))
+                    ->with('status', 'Your session expired. Please sign in again.');
+            }
+        });
     })->create();

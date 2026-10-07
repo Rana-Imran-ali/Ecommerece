@@ -233,12 +233,12 @@ class ProductController extends Controller
      */
    public function destroy(Product $product): JsonResponse
 {
-    foreach ($product->images as $image) {
-        Storage::disk('public')->delete($image->image);
-        $image->delete();
-    }
-
-    $product->delete();
+    // NOTE: Do NOT manually delete images here.
+    // The Product model's booted() `deleting` observer already handles:
+    //   - Hard-delete: removes image files from disk + DB records
+    //   - Soft-delete: only cascades to variants, cart items, and wishlist items
+    // Pre-emptively deleting images here would orphan them on restore.
+    $product->delete(); // Soft-delete — images preserved for potential restore
 
     Cache::forget('categories.all');
 

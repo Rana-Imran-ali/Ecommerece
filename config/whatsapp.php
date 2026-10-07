@@ -10,7 +10,7 @@ return [
     | Used by the frontend floating chat button to open direct WhatsApp conversation.
     |
     */
-    'support_phone' => env('WHATSAPP_SUPPORT_PHONE', '18005550199'),
+    'support_phone' => env('WHATSAPP_SUPPORT_PHONE', '923411426679'),
 
     /*
     |--------------------------------------------------------------------------

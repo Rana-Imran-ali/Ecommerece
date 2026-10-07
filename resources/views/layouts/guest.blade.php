@@ -47,5 +47,14 @@
                 </a>
             </div>
         </div>
+
+        <script>
+            // Automatically reload if restored from browser bfcache to guarantee fresh CSRF token
+            window.addEventListener('pageshow', function (event) {
+                if (event.persisted) {
+                    window.location.reload();
+                }
+            });
+        </script>
     </body>
 </html>

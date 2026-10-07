@@ -1,5 +1,5 @@
 @php
-    $whatsappPhone = config('whatsapp.support_phone', env('WHATSAPP_SUPPORT_PHONE', '18005550199'));
+    $whatsappPhone = config('whatsapp.support_phone', env('WHATSAPP_SUPPORT_PHONE', '923411426679'));
     // Strip everything except digits
     $cleanPhone = preg_replace('/[^0-9]/', '', $whatsappPhone);
     $defaultMsg = rawurlencode(config('whatsapp.default_message', 'Hello! I have a question regarding an order or product on your store.'));
@@ -114,7 +114,7 @@
 
         <button type="button"
                 id="whatsapp-toggle-btn"
-                onclick="toggleWhatsAppChat()"
+                onclick="openWhatsAppDirect()"
                 class="relative bg-[#25D366] hover:bg-[#20ba59] active:scale-95 text-white p-3.5 sm:p-4 rounded-full shadow-xl hover:shadow-2xl transition-all duration-200 flex items-center justify-center group focus:outline-none focus:ring-4 focus:ring-emerald-300"
                 aria-label="Open WhatsApp Chat">
             <!-- Green ping ring -->
@@ -137,7 +137,17 @@
     const WA_PHONE = '{{ $cleanPhone }}';
     const WA_DEFAULT_MSG = '{{ config('whatsapp.default_message', 'Hello! I have a question regarding an order or product on your store.') }}';
 
+function openWhatsAppDirect() {
+    const msg = encodeURIComponent(WA_DEFAULT_MSG);
+    const url = `https://wa.me/${WA_PHONE}?text=${msg}`;
+
+    window.open(url, '_blank', 'noopener,noreferrer');
+}
+
+
+
     function toggleWhatsAppChat(forceState) {
+
         const popup = document.getElementById('whatsapp-popup');
         const iconChat = document.getElementById('whatsapp-icon-chat');
         const iconClose = document.getElementById('whatsapp-icon-close');

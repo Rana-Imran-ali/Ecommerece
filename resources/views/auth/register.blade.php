@@ -5,7 +5,7 @@
         <p class="text-xs text-slate-500 mt-1.5">Join thousands of happy shoppers today — it's free</p>
     </div>
 
-    <form method="POST" action="{{ route('register') }}" class="space-y-5">
+    <form method="POST" action="{{ route('register') }}" class="space-y-5" onsubmit="const btn=this.querySelector('button[type=submit]'); if(btn){ btn.disabled=true; btn.classList.add('opacity-75'); }">
         @csrf
 
         <!-- Name -->
