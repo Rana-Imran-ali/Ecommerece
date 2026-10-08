@@ -250,6 +250,7 @@ class ProductAiContextService
                     'name'  => $p->name,
                     'price' => (float) $p->price,
                     'stock' => $p->stock > 0 ? 'In Stock' : 'Out of Stock',
+
                 ];
             })
             ->toArray();
@@ -263,3 +264,4 @@ class ProductAiContextService
         ];
     }
 }
+ 

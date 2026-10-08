@@ -93,17 +93,9 @@ class OrderController extends Controller
         $paymentMethod         = $request->input('payment_method');
         $stripePaymentIntentId = $request->input('stripe_payment_intent_id');
 
-        // ── Concurrency Prevention: Atomic lock on the specific PaymentIntent ──
-        // Synchronizes client checkout directly with Stripe webhook
-        $piLock = ($paymentMethod === 'card' && !empty($stripePaymentIntentId))
-            ? Cache::lock('stripe_pi_' . $stripePaymentIntentId, 15)
-            : null;
-
-        if ($piLock) {
-            try {
-                $piLock->block(5);
-            } catch (\Throwable $e) {}
-        }
+        // ── Webhook Race Condition Resolution ─────────────────────────────
+        // Note: PaymentFulfillmentService::fulfill() atomically serializes concurrent fulfillment
+        // using its own distributed lock on stripe_pi_{paymentIntentId}.
 
 
         // ── Webhook Race Condition Resolution ─────────────────────────────
@@ -412,9 +404,6 @@ class OrderController extends Controller
                 ], Response::HTTP_INTERNAL_SERVER_ERROR);
             } finally {
                 $lock->release();
-                if (isset($piLock) && $piLock) {
-                    try { $piLock->release(); } catch (\Throwable $e) {}
-                }
             }
 
             if (!$order) {

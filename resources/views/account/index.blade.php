@@ -641,6 +641,14 @@ let currentUser = null;
 let ordersPage = 1;
 let avatarFile = null;
 
+// Section-load cache: tracks which sections have already fetched data
+const _sectionLoaded = { orders: false, wishlist: false, addresses: false };
+
+// Call this after any mutation that should force a section to reload
+function _invalidateSection(name) {
+    if (name in _sectionLoaded) _sectionLoaded[name] = false;
+}
+
 /* ═══════════════════════════════════════════════════════════════
    INIT – auth gate
 ═══════════════════════════════════════════════════════════════ */
@@ -685,10 +693,10 @@ function switchSection(name) {
     document.querySelector(`.sidebar-nav-item[data-section="${name}"]`)?.classList.add('active');
     document.querySelector(`.mobile-tab[data-section="${name}"]`)?.classList.add('active');
 
-    // Lazy-load section data
-    if (name === 'orders')    loadOrders();
-    if (name === 'wishlist')  loadWishlist();
-    if (name === 'addresses') loadAddresses();
+    // Lazy-load section data only once per page load
+    if (name === 'orders'    && !_sectionLoaded.orders)    { _sectionLoaded.orders    = true; loadOrders(); }
+    if (name === 'wishlist'  && !_sectionLoaded.wishlist)  { _sectionLoaded.wishlist  = true; loadWishlist(); }
+    if (name === 'addresses' && !_sectionLoaded.addresses) { _sectionLoaded.addresses = true; loadAddresses(); }
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -844,6 +852,8 @@ async function cancelOrder(orderId) {
     const res = await apiFetch('/api/orders/' + orderId + '/cancel', {method:'PATCH'});
     if (res.ok) {
         showAlert('orders-alert', 'Order #' + orderId + ' cancelled and deleted from database.', 'success');
+        _invalidateSection('orders');
+        _sectionLoaded.orders = true;  // we are about to reload immediately
         loadOrders(ordersPage);
         loadUserData();
         loadRecentOrders();
@@ -897,14 +907,14 @@ async function loadWishlist() {
 
 async function removeWishlistItem(itemId) {
     const res = await apiFetch('/api/wishlist/items/' + itemId, {method:'DELETE'});
-    if (res.ok) { loadWishlist(); showAlert('wishlist-alert','Item removed from wishlist.','success'); }
+    if (res.ok) { _sectionLoaded.wishlist = true; loadWishlist(); showAlert('wishlist-alert','Item removed from wishlist.','success'); }
     else showAlert('wishlist-alert', res.data?.message || 'Could not remove item.', 'danger');
 }
 
 async function clearWishlist() {
     if (!confirm('Clear your entire wishlist?')) return;
     const res = await apiFetch('/api/wishlist', {method:'DELETE'});
-    if (res.ok) { loadWishlist(); showAlert('wishlist-alert','Wishlist cleared.','success'); }
+    if (res.ok) { _sectionLoaded.wishlist = true; loadWishlist(); showAlert('wishlist-alert','Wishlist cleared.','success'); }
     else showAlert('wishlist-alert', res.data?.message || 'Could not clear wishlist.', 'danger');
 }
 
@@ -993,7 +1003,7 @@ async function handleSaveAddress(e) {
 
     if (res.ok) {
         closeAddressModal();
-        loadAddresses();
+        _sectionLoaded.addresses = true; loadAddresses();
         showAlert('addresses-alert', id ? 'Address updated.' : 'Address added.', 'success');
     } else {
         showAlert('addresses-alert', res.data?.message || 'Could not save address.', 'danger');
@@ -1003,14 +1013,14 @@ async function handleSaveAddress(e) {
 
 async function setDefaultAddress(id) {
     const res = await apiFetch('/api/addresses/' + id + '/default', {method:'PATCH'});
-    if (res.ok) { loadAddresses(); showAlert('addresses-alert','Default address updated.','success'); }
+    if (res.ok) { _sectionLoaded.addresses = true; loadAddresses(); showAlert('addresses-alert','Default address updated.','success'); }
     else showAlert('addresses-alert', res.data?.message || 'Error.', 'danger');
 }
 
 async function deleteAddress(id) {
     if (!confirm('Delete this address?')) return;
     const res = await apiFetch('/api/addresses/' + id, {method:'DELETE'});
-    if (res.ok) { loadAddresses(); showAlert('addresses-alert','Address deleted.','success'); }
+    if (res.ok) { _sectionLoaded.addresses = true; loadAddresses(); showAlert('addresses-alert','Address deleted.','success'); }
     else showAlert('addresses-alert', res.data?.message || 'Could not delete address.', 'danger');
 }
 

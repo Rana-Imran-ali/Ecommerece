@@ -17,6 +17,7 @@ return new class extends Migration
             $table->string('image');
             $table->boolean('is_primary')->default(false);
             $table->timestamps();
+            
         });
     }
 

@@ -48,7 +48,7 @@ class PaymentFulfillmentService
         $lock = Cache::lock('stripe_pi_' . $paymentIntentId, 20);
 
         try {
-            $lock->block(10);
+            $lock->block(5);
         } catch (\Throwable $e) {
             Log::warning("Could not acquire lock for stripe_pi_{$paymentIntentId}: " . $e->getMessage());
         }

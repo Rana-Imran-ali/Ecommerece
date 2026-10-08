@@ -13,6 +13,7 @@ class Review extends Model
         'rating',
         'comment',
         'status',
+        
     ];
 
     protected $casts = [
@@ -28,4 +29,27 @@ class Review extends Model
     {
         return $this->belongsTo(Product::class)->withTrashed();
     }
+
+
+
+
+
+
+
+
+
+
+
 }
+
+
+
+
+
+
+
+
+
+
+
+
